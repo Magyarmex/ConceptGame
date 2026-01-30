@@ -15,11 +15,14 @@ so outbound HTTPS access is required.
 
 ## Controls
 - Drag with the mouse or touch to rotate the camera.
+- Move with WASD.
+- Jump with Space.
 
 ## Debugging
 - Append `?debug` to the URL to enable the on-screen debug console.
 - Errors and unhandled promise rejections will be captured in the debug console when enabled.
 - Live stats (FPS/frame time/draw calls/triangles) appear in the debug console.
+- Run `node scripts/diagnostics.mjs` to check core file wiring and debug hooks.
 
 ## GitHub Pages
 - The site is fully static; GitHub Pages should serve `index.html` at the repo root.

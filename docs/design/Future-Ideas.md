@@ -38,8 +38,13 @@ A curated list of forward-looking concepts. Only items that are not implemented 
 - **Validation:** Store a snapshot artifact and compare for regression.
 
 ## Next Direction (29/01/26 — GPT-5.2-Codex #1)
-- **Add player controller stub:** WASD movement, jump, and capsule collider with simple ground checks.
 - **Input + camera cleanup:** centralize pointer/keyboard input handling and smooth camera damping.
 - **Scene composition pass:** replace primitives with low-poly placeholders for player, enemies, and cover.
 - **Performance baseline:** add a frame time budget checklist and capture initial metrics in debug overlay.
 - **Local dev quality-of-life:** add a small “launch server + open URL” script for contributors.
+
+## New Ideas (Post-Movement Prototype)
+- **Slope + platform grounding:** allow simple collision with ramps and raised platforms.
+- **Jump buffer + coyote time:** make jumps feel consistent without losing skill expression.
+- **Sprint + stamina micro-loop:** short burst mobility tied to player intent and risk.
+- **Camera collision & shoulder swap:** prevent clipping while keeping readable combat framing.
