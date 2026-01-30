@@ -214,9 +214,9 @@ function updateCameraPosition(delta) {
   camera.lookAt(cameraLook);
 }
 
-function resolveEnvironmentCollisions() {
+const resolveEnvironmentCollisions = () => {
   // Placeholder: environment collision handling not yet implemented.
-}
+};
 
 const clock = new THREE.Clock();
 let frameCount = 0;
