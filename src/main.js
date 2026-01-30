@@ -469,10 +469,10 @@ window.addEventListener("keydown", (event) => {
     inputState.forward = -1;
   }
   if (event.code === "KeyA") {
-    inputState.strafe = -1;
+    inputState.strafe = 1;
   }
   if (event.code === "KeyD") {
-    inputState.strafe = 1;
+    inputState.strafe = -1;
   }
   if (event.code === "Space") {
     inputState.jumpQueued = true;
@@ -490,10 +490,10 @@ window.addEventListener("keyup", (event) => {
   if (event.code === "KeyS" && inputState.forward === -1) {
     inputState.forward = 0;
   }
-  if (event.code === "KeyA" && inputState.strafe === -1) {
+  if (event.code === "KeyA" && inputState.strafe === 1) {
     inputState.strafe = 0;
   }
-  if (event.code === "KeyD" && inputState.strafe === 1) {
+  if (event.code === "KeyD" && inputState.strafe === -1) {
     inputState.strafe = 0;
   }
 });
