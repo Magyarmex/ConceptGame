@@ -1,5 +1,12 @@
 import * as THREE from "https://unpkg.com/three@0.168.0/build/three.module.js";
 import { createDebugBus } from "./debug.js";
+import {
+  createCapsuleCollider,
+  createRigidBody,
+  integrateBody,
+  resolveCollisions,
+} from "./physics.js";
+import { buildTwoBoneChain, solveIK } from "./ik.js";
 
 const debug = createDebugBus();
 const app = document.querySelector("#app");
@@ -126,34 +133,39 @@ const player = new THREE.Mesh(
 player.position.set(0, 1.2, 0);
 scene.add(player);
 
-const playerState = {
-  velocity: new THREE.Vector3(),
+const playerConfig = {
   moveSpeed: 5,
   jumpSpeed: 6.5,
   gravity: 18,
   damping: 10,
-  onGround: false,
   height: 1.6,
   radius: 0.45,
 };
 
-player.position.y = playerState.height / 2;
-playerState.onGround = true;
+const playerBody = createRigidBody({
+  position: new THREE.Vector3(0, playerConfig.height / 2, 0),
+  velocity: new THREE.Vector3(),
+  gravityScale: 1,
+});
+
+const playerCollider = createCapsuleCollider({
+  radius: playerConfig.radius,
+  halfHeight: (playerConfig.height - playerConfig.radius * 2) / 2,
+});
+
+player.position.copy(playerBody.position);
 
 const collisionVolumes = collisionMeshes.map((mesh) => ({
   mesh,
   box: new THREE.Box3(),
 }));
-
-const playerBox = new THREE.Box3();
-const playerCenter = new THREE.Vector3();
-const playerHalfSize = new THREE.Vector3(
-  playerState.radius,
-  playerState.height / 2,
-  playerState.radius
-);
-const obstacleCenter = new THREE.Vector3();
-const obstacleHalfSize = new THREE.Vector3();
+const floorCollider = {
+  box: new THREE.Box3(
+    new THREE.Vector3(-10, -0.1, -10),
+    new THREE.Vector3(10, 0.1, 10)
+  ),
+};
+const staticColliders = [...collisionVolumes, floorCollider];
 
 const inputState = {
   forward: 0,
@@ -161,11 +173,79 @@ const inputState = {
   jumpQueued: false,
 };
 
+const ikGroup = new THREE.Group();
+scene.add(ikGroup);
+
+const rigBase = new THREE.Mesh(
+  new THREE.BoxGeometry(0.6, 0.6, 0.6),
+  new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.5 })
+);
+rigBase.position.set(-3, 1.5, 3.2);
+ikGroup.add(rigBase);
+
+const ikRoot = new THREE.Vector3(
+  rigBase.position.x,
+  rigBase.position.y + 0.6,
+  rigBase.position.z
+);
+const ikChain = buildTwoBoneChain(ikRoot, 0.8, 0.8);
+const ikTarget = new THREE.Mesh(
+  new THREE.SphereGeometry(0.12, 16, 16),
+  new THREE.MeshStandardMaterial({ color: 0xe11d48 })
+);
+ikTarget.position.set(
+  rigBase.position.x + 0.8,
+  rigBase.position.y + 1.2,
+  rigBase.position.z + 0.2
+);
+ikGroup.add(ikTarget);
+
+const jointGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+const jointMaterial = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+const jointMeshes = ikChain.joints.map(() => {
+  const joint = new THREE.Mesh(jointGeometry, jointMaterial);
+  ikGroup.add(joint);
+  return joint;
+});
+
+const boneGeometry = new THREE.CylinderGeometry(0.06, 0.06, 1, 12);
+const boneMaterial = new THREE.MeshStandardMaterial({ color: 0x94a3b8 });
+const boneMeshes = [0, 1].map(() => {
+  const bone = new THREE.Mesh(boneGeometry, boneMaterial);
+  ikGroup.add(bone);
+  return bone;
+});
+
+const ikTargetState = {
+  forward: 0,
+  strafe: 0,
+  lift: 0,
+  speed: 1.2,
+};
+
+function updateBoneMesh(mesh, start, end) {
+  const direction = new THREE.Vector3().subVectors(end, start);
+  const length = direction.length();
+  mesh.position.copy(start).addScaledVector(direction, 0.5);
+  if (length > 0) {
+    direction.normalize();
+    mesh.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      direction
+    );
+  }
+  mesh.scale.set(1, length, 1);
+}
+
 const cameraFocus = new THREE.Vector3();
 const cameraDesired = new THREE.Vector3();
 const cameraLook = new THREE.Vector3();
 const cameraLookTarget = new THREE.Vector3();
 const cameraForward = new THREE.Vector3();
+const movementForward = new THREE.Vector3();
+const movementRight = new THREE.Vector3();
+const moveDirection = new THREE.Vector3();
+const targetVelocity = new THREE.Vector3();
 
 const cameraConfig = {
   thirdPerson: {
@@ -199,8 +279,8 @@ function updateCameraVectors(yaw, pitch) {
 
 function updateCameraPosition(delta) {
   const { radius, yaw, pitch } = cameraState;
-  const headOffset = playerState.height * 0.85;
-  cameraFocus.copy(player.position);
+  const headOffset = playerConfig.height * 0.85;
+  cameraFocus.copy(playerBody.position);
   cameraFocus.y += headOffset;
 
   updateCameraVectors(yaw, pitch);
@@ -224,73 +304,10 @@ function updateCameraPosition(delta) {
   camera.lookAt(cameraLook);
 }
 
-const resolveEnvironmentCollisions = () => {
+const updateStaticColliders = () => {
   collisionVolumes.forEach(({ mesh, box }) => {
     mesh.updateWorldMatrix(true, false);
     box.setFromObject(mesh);
-  });
-
-  playerBox.setFromCenterAndSize(
-    player.position,
-    new THREE.Vector3(
-      playerState.radius * 2,
-      playerState.height,
-      playerState.radius * 2
-    )
-  );
-
-  collisionVolumes.forEach(({ box }) => {
-    if (!playerBox.intersectsBox(box)) {
-      return;
-    }
-
-    playerBox.getCenter(playerCenter);
-    box.getCenter(obstacleCenter);
-
-    obstacleHalfSize
-      .subVectors(box.max, box.min)
-      .multiplyScalar(0.5);
-
-    const deltaX = playerCenter.x - obstacleCenter.x;
-    const deltaY = playerCenter.y - obstacleCenter.y;
-    const deltaZ = playerCenter.z - obstacleCenter.z;
-    const overlapX =
-      playerHalfSize.x + obstacleHalfSize.x - Math.abs(deltaX);
-    const overlapY =
-      playerHalfSize.y + obstacleHalfSize.y - Math.abs(deltaY);
-    const overlapZ =
-      playerHalfSize.z + obstacleHalfSize.z - Math.abs(deltaZ);
-
-    if (overlapX <= 0 || overlapY <= 0 || overlapZ <= 0) {
-      return;
-    }
-
-    const pushX = deltaX >= 0 ? 1 : -1;
-    const pushY = deltaY >= 0 ? 1 : -1;
-    const pushZ = deltaZ >= 0 ? 1 : -1;
-
-    if (overlapX < overlapY && overlapX < overlapZ) {
-      player.position.x += pushX * overlapX;
-      playerState.velocity.x = 0;
-    } else if (overlapZ < overlapY) {
-      player.position.z += pushZ * overlapZ;
-      playerState.velocity.z = 0;
-    } else {
-      player.position.y += pushY * overlapY;
-      playerState.velocity.y = 0;
-      if (deltaY > 0) {
-        playerState.onGround = true;
-      }
-    }
-
-    playerBox.setFromCenterAndSize(
-      player.position,
-      new THREE.Vector3(
-        playerState.radius * 2,
-        playerState.height,
-        playerState.radius * 2
-      )
-    );
   });
 };
 
@@ -304,59 +321,67 @@ function animate() {
   baseMesh.rotation.y = elapsed * 0.6;
   baseMesh.rotation.x = elapsed * 0.3;
 
-  const forward = new THREE.Vector3(
+  movementForward.set(
     Math.cos(cameraState.yaw),
     0,
     Math.sin(cameraState.yaw)
   );
-  const right = new THREE.Vector3(-forward.z, 0, forward.x);
-  const moveDirection = new THREE.Vector3();
+  movementRight.set(-movementForward.z, 0, movementForward.x);
   moveDirection
-    .addScaledVector(forward, inputState.forward)
-    .addScaledVector(right, inputState.strafe);
+    .set(0, 0, 0)
+    .addScaledVector(movementForward, inputState.forward)
+    .addScaledVector(movementRight, inputState.strafe);
   if (moveDirection.lengthSq() > 0) {
     moveDirection.normalize();
   }
 
-  playerState.velocity.x = moveDirection.x * playerState.moveSpeed;
-  playerState.velocity.z = moveDirection.z * playerState.moveSpeed;
-  if (moveDirection.lengthSq() === 0) {
-    playerState.velocity.x = THREE.MathUtils.damp(
-      playerState.velocity.x,
-      0,
-      playerState.damping,
-      delta
-    );
-    playerState.velocity.z = THREE.MathUtils.damp(
-      playerState.velocity.z,
-      0,
-      playerState.damping,
-      delta
-    );
-  }
+  targetVelocity
+    .copy(moveDirection)
+    .multiplyScalar(playerConfig.moveSpeed);
+  playerBody.velocity.x = THREE.MathUtils.damp(
+    playerBody.velocity.x,
+    targetVelocity.x,
+    playerConfig.damping,
+    delta
+  );
+  playerBody.velocity.z = THREE.MathUtils.damp(
+    playerBody.velocity.z,
+    targetVelocity.z,
+    playerConfig.damping,
+    delta
+  );
 
-  const wasOnGround = playerState.onGround;
-  playerState.onGround = false;
-  playerState.velocity.y -= playerState.gravity * delta;
-  if (wasOnGround) {
-    if (inputState.jumpQueued) {
-      playerState.velocity.y = playerState.jumpSpeed;
-    } else {
-      playerState.velocity.y = Math.max(playerState.velocity.y, 0);
-    }
+  if (playerBody.onGround && inputState.jumpQueued) {
+    playerBody.velocity.y = playerConfig.jumpSpeed;
   }
   inputState.jumpQueued = false;
 
-  player.position.addScaledVector(playerState.velocity, delta);
-  resolveEnvironmentCollisions();
-  const groundY = playerState.height / 2;
-  if (player.position.y <= groundY) {
-    player.position.y = groundY;
-    playerState.velocity.y = 0;
-    playerState.onGround = true;
-  }
+  integrateBody(playerBody, delta, playerConfig.gravity);
+  updateStaticColliders();
+  resolveCollisions(playerBody, playerCollider, staticColliders);
 
+  player.position.copy(playerBody.position);
   player.rotation.y = Math.PI / 2 - cameraState.yaw;
+
+  ikTarget.position.x += ikTargetState.strafe * ikTargetState.speed * delta;
+  ikTarget.position.z += ikTargetState.forward * ikTargetState.speed * delta;
+  ikTarget.position.y += ikTargetState.lift * ikTargetState.speed * delta;
+  ikTarget.position.y = THREE.MathUtils.clamp(
+    ikTarget.position.y,
+    0.6,
+    3.2
+  );
+
+  const ikResult = solveIK(
+    { joints: ikChain.joints },
+    ikTarget.position,
+    { iterations: 6, tolerance: 0.002 }
+  );
+  ikResult.joints.forEach((joint, index) => {
+    jointMeshes[index].position.copy(joint);
+  });
+  updateBoneMesh(boneMeshes[0], ikResult.joints[0], ikResult.joints[1]);
+  updateBoneMesh(boneMeshes[1], ikResult.joints[1], ikResult.joints[2]);
 
   updateCameraPosition(delta);
 
@@ -481,6 +506,24 @@ window.addEventListener("keydown", (event) => {
     cameraState.mode = cameraState.mode === "third" ? "first" : "third";
     cameraState.pitch = clampPitch(cameraState.pitch, cameraState.mode);
   }
+  if (event.code === "ArrowUp") {
+    ikTargetState.forward = 1;
+  }
+  if (event.code === "ArrowDown") {
+    ikTargetState.forward = -1;
+  }
+  if (event.code === "ArrowLeft") {
+    ikTargetState.strafe = -1;
+  }
+  if (event.code === "ArrowRight") {
+    ikTargetState.strafe = 1;
+  }
+  if (event.code === "KeyR") {
+    ikTargetState.lift = 1;
+  }
+  if (event.code === "KeyF") {
+    ikTargetState.lift = -1;
+  }
 });
 
 window.addEventListener("keyup", (event) => {
@@ -495,5 +538,23 @@ window.addEventListener("keyup", (event) => {
   }
   if (event.code === "KeyD" && inputState.strafe === 1) {
     inputState.strafe = 0;
+  }
+  if (event.code === "ArrowUp" && ikTargetState.forward === 1) {
+    ikTargetState.forward = 0;
+  }
+  if (event.code === "ArrowDown" && ikTargetState.forward === -1) {
+    ikTargetState.forward = 0;
+  }
+  if (event.code === "ArrowLeft" && ikTargetState.strafe === -1) {
+    ikTargetState.strafe = 0;
+  }
+  if (event.code === "ArrowRight" && ikTargetState.strafe === 1) {
+    ikTargetState.strafe = 0;
+  }
+  if (event.code === "KeyR" && ikTargetState.lift === 1) {
+    ikTargetState.lift = 0;
+  }
+  if (event.code === "KeyF" && ikTargetState.lift === -1) {
+    ikTargetState.lift = 0;
   }
 });
