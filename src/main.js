@@ -67,6 +67,11 @@ const columnOffsets = [
   [2, 0.9, -1.5],
   [-1.5, 0.9, 2.2],
 ];
+const collisionMeshes = [];
+
+function registerCollisionMesh(mesh) {
+  collisionMeshes.push(mesh);
+}
 
 columnOffsets.forEach(([x, y, z]) => {
   const column = new THREE.Mesh(columnGeometry, columnMaterial);
@@ -246,32 +251,67 @@ function handleResize() {
 
 window.addEventListener("resize", handleResize);
 
-let isDragging = false;
-let lastPointer = { x: 0, y: 0 };
+const pointerState = {
+  isDragging: false,
+  isPointerLocked: false,
+  lastPointer: { x: 0, y: 0 },
+};
+
+function applyLookDelta(deltaX, deltaY, sensitivity) {
+  cameraState.yaw -= deltaX * sensitivity;
+  cameraState.pitch += deltaY * sensitivity;
+  cameraState.pitch = clampPitch(cameraState.pitch, cameraState.mode);
+}
 
 renderer.domElement.addEventListener("pointerdown", (event) => {
-  isDragging = true;
-  lastPointer = { x: event.clientX, y: event.clientY };
+  if (event.button !== 0) {
+    return;
+  }
+
+  pointerState.isDragging = true;
+  pointerState.lastPointer = { x: event.clientX, y: event.clientY };
   renderer.domElement.setPointerCapture(event.pointerId);
+
+  if (renderer.domElement.requestPointerLock) {
+    renderer.domElement.requestPointerLock();
+  }
 });
 
 renderer.domElement.addEventListener("pointerup", (event) => {
-  isDragging = false;
+  if (event.button !== 0) {
+    return;
+  }
+
+  pointerState.isDragging = false;
   renderer.domElement.releasePointerCapture(event.pointerId);
 });
 
 renderer.domElement.addEventListener("pointerleave", () => {
-  isDragging = false;
+  pointerState.isDragging = false;
+});
+
+document.addEventListener("pointerlockchange", () => {
+  pointerState.isPointerLocked =
+    document.pointerLockElement === renderer.domElement;
 });
 
 renderer.domElement.addEventListener("pointermove", (event) => {
-  if (!isDragging) {
+  if (pointerState.isPointerLocked) {
+    applyLookDelta(
+      event.movementX,
+      event.movementY,
+      cameraConfig.sensitivity
+    );
     return;
   }
 
-  const deltaX = event.clientX - lastPointer.x;
-  const deltaY = event.clientY - lastPointer.y;
-  lastPointer = { x: event.clientX, y: event.clientY };
+  if (!pointerState.isDragging) {
+    return;
+  }
+
+  const deltaX = event.clientX - pointerState.lastPointer.x;
+  const deltaY = event.clientY - pointerState.lastPointer.y;
+  pointerState.lastPointer = { x: event.clientX, y: event.clientY };
 
   cameraState.yaw -= deltaX * 0.005;
   cameraState.pitch += deltaY * 0.005;
