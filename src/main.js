@@ -68,11 +68,17 @@ const columnOffsets = [
   [2, 0.9, -1.5],
   [-1.5, 0.9, 2.2],
 ];
+const collisionMeshes = [];
+
+function registerCollisionMesh(mesh) {
+  collisionMeshes.push(mesh);
+}
 
 columnOffsets.forEach(([x, y, z]) => {
   const column = new THREE.Mesh(columnGeometry, columnMaterial);
   column.position.set(x, y, z);
   environmentGroup.add(column);
+  registerCollisionMesh(column);
 });
 
 const platformMaterial = new THREE.MeshStandardMaterial({
@@ -88,6 +94,7 @@ platforms.forEach(({ position }) => {
   const platform = new THREE.Mesh(platformGeometry, platformMaterial);
   platform.position.copy(position);
   environmentGroup.add(platform);
+  registerCollisionMesh(platform);
 });
 
 const ramp = new THREE.Mesh(
@@ -97,6 +104,7 @@ const ramp = new THREE.Mesh(
 ramp.position.set(2.5, 0.2, -4.5);
 ramp.rotation.z = -Math.PI / 12;
 environmentGroup.add(ramp);
+registerCollisionMesh(ramp);
 
 const obstacleGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
@@ -108,6 +116,7 @@ const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
   const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
   obstacle.position.copy(position);
   environmentGroup.add(obstacle);
+  registerCollisionMesh(obstacle);
 });
 
 const player = new THREE.Mesh(
@@ -125,10 +134,16 @@ const playerState = {
   damping: 10,
   onGround: false,
   height: 1.6,
+  radius: 0.45,
 };
 
 player.position.y = playerState.height / 2;
 playerState.onGround = true;
+
+const collisionBoxes = collisionMeshes.map((mesh) => {
+  mesh.updateWorldMatrix(true, false);
+  return new THREE.Box3().setFromObject(mesh);
+});
 
 const inputState = {
   forward: 0,
@@ -240,11 +255,11 @@ function animate() {
     );
   }
 
+  const wasOnGround = playerState.onGround;
   playerState.velocity.y -= playerState.gravity * delta;
-  if (playerState.onGround) {
+  if (wasOnGround) {
     if (inputState.jumpQueued) {
       playerState.velocity.y = playerState.jumpSpeed;
-      playerState.onGround = false;
     } else {
       playerState.velocity.y = Math.max(playerState.velocity.y, 0);
     }
@@ -252,6 +267,7 @@ function animate() {
   inputState.jumpQueued = false;
 
   player.position.addScaledVector(playerState.velocity, delta);
+  resolveEnvironmentCollisions();
   const groundY = playerState.height / 2;
   if (player.position.y <= groundY) {
     player.position.y = groundY;
