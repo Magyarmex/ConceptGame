@@ -36,6 +36,17 @@ const cameraState = {
   radius: 7,
   yaw: Math.PI * 0.25,
   pitch: Math.PI * 0.15,
+  mode: "third",
+  thirdPerson: {
+    minPitch: -0.35,
+    maxPitch: 1.1,
+  },
+  firstPerson: {
+    minPitch: -1.2,
+    maxPitch: 1.2,
+  },
+  sensitivity: 0.0025,
+  dragSensitivity: 0.005,
 };
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
@@ -243,24 +254,9 @@ const movementRight = new THREE.Vector3();
 const moveDirection = new THREE.Vector3();
 const targetVelocity = new THREE.Vector3();
 
-const cameraConfig = {
-  thirdPerson: {
-    minPitch: -0.35,
-    maxPitch: 1.1,
-  },
-  firstPerson: {
-    minPitch: -1.2,
-    maxPitch: 1.2,
-  },
-  sensitivity: 0.0025,
-  dragSensitivity: 0.005,
-  positionSmooth: 8,
-  lookSmooth: 10,
-};
-
 function clampPitch(value, mode) {
   const limits =
-    mode === "first" ? cameraConfig.firstPerson : cameraConfig.thirdPerson;
+    mode === "first" ? cameraState.firstPerson : cameraState.thirdPerson;
   return Math.max(limits.minPitch, Math.min(limits.maxPitch, value));
 }
 
@@ -458,7 +454,7 @@ renderer.domElement.addEventListener("pointermove", (event) => {
     applyLookDelta(
       event.movementX,
       event.movementY,
-      cameraConfig.sensitivity
+      cameraState.sensitivity
     );
     return;
   }
@@ -471,8 +467,8 @@ renderer.domElement.addEventListener("pointermove", (event) => {
   const deltaY = event.clientY - pointerState.lastPointer.y;
   pointerState.lastPointer = { x: event.clientX, y: event.clientY };
 
-  cameraState.yaw -= deltaX * 0.005;
-  cameraState.pitch += deltaY * 0.005;
+  cameraState.yaw -= deltaX * cameraState.dragSensitivity;
+  cameraState.pitch += deltaY * cameraState.dragSensitivity;
   cameraState.pitch = Math.max(-1.2, Math.min(1.2, cameraState.pitch));
 });
 
