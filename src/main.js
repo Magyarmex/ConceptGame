@@ -214,6 +214,10 @@ function updateCameraPosition(delta) {
   camera.lookAt(cameraLook);
 }
 
+function resolveEnvironmentCollisions() {
+  // Placeholder: environment collision handling not yet implemented.
+}
+
 const clock = new THREE.Clock();
 let frameCount = 0;
 let statsElapsed = 0;
@@ -274,6 +278,8 @@ function animate() {
     playerState.velocity.y = 0;
     playerState.onGround = true;
   }
+
+  resolveEnvironmentCollisions();
 
   player.rotation.y = Math.PI / 2 - cameraState.yaw;
 
