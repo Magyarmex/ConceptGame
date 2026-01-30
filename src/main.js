@@ -1,5 +1,4 @@
 import * as THREE from "https://unpkg.com/three@0.168.0/build/three.module.js";
-import "./style.css";
 import { createDebugBus } from "./debug.js";
 
 const debug = createDebugBus();
