@@ -37,7 +37,7 @@ A curated list of forward-looking concepts. Only items that are not implemented 
 - **Risk:** Requires a headless browser runtime in CI.
 - **Validation:** Store a snapshot artifact and compare for regression.
 
-## Next Direction (29/01/26 — GPT-5.2-Codex)
+## Next Direction (29/01/26 — GPT-5.2-Codex #1)
 - **Add player controller stub:** WASD movement, jump, and capsule collider with simple ground checks.
 - **Input + camera cleanup:** centralize pointer/keyboard input handling and smooth camera damping.
 - **Scene composition pass:** replace primitives with low-poly placeholders for player, enemies, and cover.
