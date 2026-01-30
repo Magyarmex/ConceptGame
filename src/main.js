@@ -27,6 +27,7 @@ const cameraState = {
   radius: 7,
   yaw: Math.PI * 0.25,
   pitch: Math.PI * 0.15,
+  mode: "third",
 };
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
@@ -77,6 +78,7 @@ columnOffsets.forEach(([x, y, z]) => {
   const column = new THREE.Mesh(columnGeometry, columnMaterial);
   column.position.set(x, y, z);
   environmentGroup.add(column);
+  registerCollisionMesh(column);
 });
 
 const platformMaterial = new THREE.MeshStandardMaterial({
@@ -92,6 +94,7 @@ platforms.forEach(({ position }) => {
   const platform = new THREE.Mesh(platformGeometry, platformMaterial);
   platform.position.copy(position);
   environmentGroup.add(platform);
+  registerCollisionMesh(platform);
 });
 
 const ramp = new THREE.Mesh(
@@ -101,6 +104,7 @@ const ramp = new THREE.Mesh(
 ramp.position.set(2.5, 0.2, -4.5);
 ramp.rotation.z = -Math.PI / 12;
 environmentGroup.add(ramp);
+registerCollisionMesh(ramp);
 
 const obstacleGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
@@ -112,6 +116,7 @@ const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
   const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
   obstacle.position.copy(position);
   environmentGroup.add(obstacle);
+  registerCollisionMesh(obstacle);
 });
 
 const player = new THREE.Mesh(
@@ -129,10 +134,26 @@ const playerState = {
   damping: 10,
   onGround: false,
   height: 1.6,
+  radius: 0.45,
 };
 
 player.position.y = playerState.height / 2;
 playerState.onGround = true;
+
+const collisionVolumes = collisionMeshes.map((mesh) => ({
+  mesh,
+  box: new THREE.Box3(),
+}));
+
+const playerBox = new THREE.Box3();
+const playerCenter = new THREE.Vector3();
+const playerHalfSize = new THREE.Vector3(
+  playerState.radius,
+  playerState.height / 2,
+  playerState.radius
+);
+const obstacleCenter = new THREE.Vector3();
+const obstacleHalfSize = new THREE.Vector3();
 
 const inputState = {
   forward: 0,
@@ -143,21 +164,135 @@ const inputState = {
 const cameraFocus = new THREE.Vector3();
 const cameraDesired = new THREE.Vector3();
 const cameraLook = new THREE.Vector3();
+const cameraLookTarget = new THREE.Vector3();
+const cameraForward = new THREE.Vector3();
+
+const cameraConfig = {
+  thirdPerson: {
+    minPitch: -0.35,
+    maxPitch: 1.1,
+  },
+  firstPerson: {
+    minPitch: -1.2,
+    maxPitch: 1.2,
+  },
+  sensitivity: 0.0025,
+  dragSensitivity: 0.005,
+  positionSmooth: 8,
+  lookSmooth: 10,
+};
+
+function clampPitch(value, mode) {
+  const limits =
+    mode === "first" ? cameraConfig.firstPerson : cameraConfig.thirdPerson;
+  return Math.max(limits.minPitch, Math.min(limits.maxPitch, value));
+}
+
+function updateCameraVectors(yaw, pitch) {
+  const cosPitch = Math.cos(pitch);
+  cameraForward.set(
+    Math.cos(yaw) * cosPitch,
+    Math.sin(pitch),
+    Math.sin(yaw) * cosPitch
+  );
+}
 
 function updateCameraPosition(delta) {
   const { radius, yaw, pitch } = cameraState;
+  const headOffset = playerState.height * 0.85;
   cameraFocus.copy(player.position);
-  cameraFocus.y += playerState.height * 0.6;
+  cameraFocus.y += headOffset;
 
-  const x = radius * Math.cos(pitch) * Math.cos(yaw);
-  const z = radius * Math.cos(pitch) * Math.sin(yaw);
-  const y = radius * Math.sin(pitch);
-  cameraDesired.set(cameraFocus.x + x, cameraFocus.y + y, cameraFocus.z + z);
+  updateCameraVectors(yaw, pitch);
 
-  camera.position.lerp(cameraDesired, 1 - Math.exp(-delta * 8));
-  cameraLook.lerp(cameraFocus, 1 - Math.exp(-delta * 10));
+  if (cameraState.mode === "first") {
+    cameraDesired.copy(cameraFocus);
+    cameraLookTarget.copy(cameraForward).multiplyScalar(6).add(cameraDesired);
+  } else {
+    const cameraYaw = yaw + Math.PI;
+    const x = radius * Math.cos(pitch) * Math.cos(cameraYaw);
+    const z = radius * Math.cos(pitch) * Math.sin(cameraYaw);
+    const y = radius * Math.sin(pitch);
+    cameraDesired.set(cameraFocus.x + x, cameraFocus.y + y, cameraFocus.z + z);
+    cameraLookTarget.copy(cameraFocus);
+  }
+
+  const positionLerp = 1 - Math.exp(-delta * cameraConfig.positionSmooth);
+  const lookLerp = 1 - Math.exp(-delta * cameraConfig.lookSmooth);
+  camera.position.lerp(cameraDesired, positionLerp);
+  cameraLook.lerp(cameraLookTarget, lookLerp);
   camera.lookAt(cameraLook);
 }
+
+const resolveEnvironmentCollisions = () => {
+  collisionVolumes.forEach(({ mesh, box }) => {
+    mesh.updateWorldMatrix(true, false);
+    box.setFromObject(mesh);
+  });
+
+  playerBox.setFromCenterAndSize(
+    player.position,
+    new THREE.Vector3(
+      playerState.radius * 2,
+      playerState.height,
+      playerState.radius * 2
+    )
+  );
+
+  collisionVolumes.forEach(({ box }) => {
+    if (!playerBox.intersectsBox(box)) {
+      return;
+    }
+
+    playerBox.getCenter(playerCenter);
+    box.getCenter(obstacleCenter);
+
+    obstacleHalfSize
+      .subVectors(box.max, box.min)
+      .multiplyScalar(0.5);
+
+    const deltaX = playerCenter.x - obstacleCenter.x;
+    const deltaY = playerCenter.y - obstacleCenter.y;
+    const deltaZ = playerCenter.z - obstacleCenter.z;
+    const overlapX =
+      playerHalfSize.x + obstacleHalfSize.x - Math.abs(deltaX);
+    const overlapY =
+      playerHalfSize.y + obstacleHalfSize.y - Math.abs(deltaY);
+    const overlapZ =
+      playerHalfSize.z + obstacleHalfSize.z - Math.abs(deltaZ);
+
+    if (overlapX <= 0 || overlapY <= 0 || overlapZ <= 0) {
+      return;
+    }
+
+    const pushX = deltaX >= 0 ? 1 : -1;
+    const pushY = deltaY >= 0 ? 1 : -1;
+    const pushZ = deltaZ >= 0 ? 1 : -1;
+
+    if (overlapX < overlapY && overlapX < overlapZ) {
+      player.position.x += pushX * overlapX;
+      playerState.velocity.x = 0;
+    } else if (overlapZ < overlapY) {
+      player.position.z += pushZ * overlapZ;
+      playerState.velocity.z = 0;
+    } else {
+      player.position.y += pushY * overlapY;
+      playerState.velocity.y = 0;
+      if (deltaY > 0) {
+        playerState.onGround = true;
+      }
+    }
+
+    playerBox.setFromCenterAndSize(
+      player.position,
+      new THREE.Vector3(
+        playerState.radius * 2,
+        playerState.height,
+        playerState.radius * 2
+      )
+    );
+  });
+};
 
 const clock = new THREE.Clock();
 let frameCount = 0;
@@ -174,7 +309,7 @@ function animate() {
     0,
     Math.sin(cameraState.yaw)
   );
-  const right = new THREE.Vector3(forward.z, 0, -forward.x);
+  const right = new THREE.Vector3(-forward.z, 0, forward.x);
   const moveDirection = new THREE.Vector3();
   moveDirection
     .addScaledVector(forward, inputState.forward)
@@ -200,11 +335,12 @@ function animate() {
     );
   }
 
+  const wasOnGround = playerState.onGround;
+  playerState.onGround = false;
   playerState.velocity.y -= playerState.gravity * delta;
-  if (playerState.onGround) {
+  if (wasOnGround) {
     if (inputState.jumpQueued) {
       playerState.velocity.y = playerState.jumpSpeed;
-      playerState.onGround = false;
     } else {
       playerState.velocity.y = Math.max(playerState.velocity.y, 0);
     }
@@ -212,12 +348,15 @@ function animate() {
   inputState.jumpQueued = false;
 
   player.position.addScaledVector(playerState.velocity, delta);
+  resolveEnvironmentCollisions();
   const groundY = playerState.height / 2;
   if (player.position.y <= groundY) {
     player.position.y = groundY;
     playerState.velocity.y = 0;
     playerState.onGround = true;
   }
+
+  player.rotation.y = Math.PI / 2 - cameraState.yaw;
 
   updateCameraPosition(delta);
 
@@ -313,9 +452,7 @@ renderer.domElement.addEventListener("pointermove", (event) => {
   const deltaY = event.clientY - pointerState.lastPointer.y;
   pointerState.lastPointer = { x: event.clientX, y: event.clientY };
 
-  cameraState.yaw -= deltaX * 0.005;
-  cameraState.pitch += deltaY * 0.005;
-  cameraState.pitch = Math.max(-1.2, Math.min(1.2, cameraState.pitch));
+  applyLookDelta(deltaX, deltaY, cameraConfig.dragSensitivity);
 });
 
 debug.attachRenderer(renderer);
@@ -332,13 +469,17 @@ window.addEventListener("keydown", (event) => {
     inputState.forward = -1;
   }
   if (event.code === "KeyA") {
-    inputState.strafe = -1;
+    inputState.strafe = 1;
   }
   if (event.code === "KeyD") {
-    inputState.strafe = 1;
+    inputState.strafe = -1;
   }
   if (event.code === "Space") {
     inputState.jumpQueued = true;
+  }
+  if (event.code === "KeyC") {
+    cameraState.mode = cameraState.mode === "third" ? "first" : "third";
+    cameraState.pitch = clampPitch(cameraState.pitch, cameraState.mode);
   }
 });
 
@@ -349,10 +490,10 @@ window.addEventListener("keyup", (event) => {
   if (event.code === "KeyS" && inputState.forward === -1) {
     inputState.forward = 0;
   }
-  if (event.code === "KeyA" && inputState.strafe === -1) {
+  if (event.code === "KeyA" && inputState.strafe === 1) {
     inputState.strafe = 0;
   }
-  if (event.code === "KeyD" && inputState.strafe === 1) {
+  if (event.code === "KeyD" && inputState.strafe === -1) {
     inputState.strafe = 0;
   }
 });
