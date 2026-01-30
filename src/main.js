@@ -140,10 +140,20 @@ const playerState = {
 player.position.y = playerState.height / 2;
 playerState.onGround = true;
 
-const collisionBoxes = collisionMeshes.map((mesh) => {
-  mesh.updateWorldMatrix(true, false);
-  return new THREE.Box3().setFromObject(mesh);
-});
+const collisionVolumes = collisionMeshes.map((mesh) => ({
+  mesh,
+  box: new THREE.Box3(),
+}));
+
+const playerBox = new THREE.Box3();
+const playerCenter = new THREE.Vector3();
+const playerHalfSize = new THREE.Vector3(
+  playerState.radius,
+  playerState.height / 2,
+  playerState.radius
+);
+const obstacleCenter = new THREE.Vector3();
+const obstacleHalfSize = new THREE.Vector3();
 
 const inputState = {
   forward: 0,
@@ -215,7 +225,73 @@ function updateCameraPosition(delta) {
 }
 
 const resolveEnvironmentCollisions = () => {
-  // Placeholder: environment collision handling not yet implemented.
+  collisionVolumes.forEach(({ mesh, box }) => {
+    mesh.updateWorldMatrix(true, false);
+    box.setFromObject(mesh);
+  });
+
+  playerBox.setFromCenterAndSize(
+    player.position,
+    new THREE.Vector3(
+      playerState.radius * 2,
+      playerState.height,
+      playerState.radius * 2
+    )
+  );
+
+  collisionVolumes.forEach(({ box }) => {
+    if (!playerBox.intersectsBox(box)) {
+      return;
+    }
+
+    playerBox.getCenter(playerCenter);
+    box.getCenter(obstacleCenter);
+
+    obstacleHalfSize
+      .subVectors(box.max, box.min)
+      .multiplyScalar(0.5);
+
+    const deltaX = playerCenter.x - obstacleCenter.x;
+    const deltaY = playerCenter.y - obstacleCenter.y;
+    const deltaZ = playerCenter.z - obstacleCenter.z;
+    const overlapX =
+      playerHalfSize.x + obstacleHalfSize.x - Math.abs(deltaX);
+    const overlapY =
+      playerHalfSize.y + obstacleHalfSize.y - Math.abs(deltaY);
+    const overlapZ =
+      playerHalfSize.z + obstacleHalfSize.z - Math.abs(deltaZ);
+
+    if (overlapX <= 0 || overlapY <= 0 || overlapZ <= 0) {
+      return;
+    }
+
+    const pushX = deltaX >= 0 ? 1 : -1;
+    const pushY = deltaY >= 0 ? 1 : -1;
+    const pushZ = deltaZ >= 0 ? 1 : -1;
+
+    if (overlapX < overlapY && overlapX < overlapZ) {
+      player.position.x += pushX * overlapX;
+      playerState.velocity.x = 0;
+    } else if (overlapZ < overlapY) {
+      player.position.z += pushZ * overlapZ;
+      playerState.velocity.z = 0;
+    } else {
+      player.position.y += pushY * overlapY;
+      playerState.velocity.y = 0;
+      if (deltaY > 0) {
+        playerState.onGround = true;
+      }
+    }
+
+    playerBox.setFromCenterAndSize(
+      player.position,
+      new THREE.Vector3(
+        playerState.radius * 2,
+        playerState.height,
+        playerState.radius * 2
+      )
+    );
+  });
 };
 
 const clock = new THREE.Clock();
@@ -260,6 +336,7 @@ function animate() {
   }
 
   const wasOnGround = playerState.onGround;
+  playerState.onGround = false;
   playerState.velocity.y -= playerState.gravity * delta;
   if (wasOnGround) {
     if (inputState.jumpQueued) {
@@ -278,8 +355,6 @@ function animate() {
     playerState.velocity.y = 0;
     playerState.onGround = true;
   }
-
-  resolveEnvironmentCollisions();
 
   player.rotation.y = Math.PI / 2 - cameraState.yaw;
 
@@ -322,7 +397,7 @@ const pointerState = {
 };
 
 function applyLookDelta(deltaX, deltaY, sensitivity) {
-  cameraState.yaw -= deltaX * sensitivity;
+  cameraState.yaw += deltaX * sensitivity;
   cameraState.pitch -= deltaY * sensitivity;
   cameraState.pitch = clampPitch(cameraState.pitch, cameraState.mode);
 }
