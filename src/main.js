@@ -397,8 +397,8 @@ const pointerState = {
 };
 
 function applyLookDelta(deltaX, deltaY, sensitivity) {
-  cameraState.yaw += deltaX * sensitivity;
-  cameraState.pitch -= deltaY * sensitivity;
+  cameraState.yaw -= deltaX * sensitivity;
+  cameraState.pitch += deltaY * sensitivity;
   cameraState.pitch = clampPitch(cameraState.pitch, cameraState.mode);
 }
 
