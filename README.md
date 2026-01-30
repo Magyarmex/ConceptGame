@@ -15,6 +15,8 @@ so outbound HTTPS access is required.
 
 ## Controls
 - Drag with the mouse or touch to rotate the camera.
+- Move with WASD.
+- Jump with Space.
 
 ## Debugging
 - Append `?debug` to the URL to enable the on-screen debug console.
