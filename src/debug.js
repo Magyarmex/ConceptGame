@@ -1,5 +1,17 @@
 const DEBUG_QUERY_KEY = "debug";
 const DEBUG_STORAGE_KEY = "conceptgame:debug";
+const LOG_LIMIT = 200;
+const CHECK_LIMIT = 50;
+
+const logBuffer = [];
+const checkBuffer = [];
+
+function pushBuffer(buffer, entry, limit) {
+  buffer.push(entry);
+  if (buffer.length > limit) {
+    buffer.shift();
+  }
+}
 
 function isDebugEnabled() {
   const queryEnabled = new URLSearchParams(window.location.search).has(
@@ -21,38 +33,69 @@ export function createDebugBus() {
       timestamp: new Date().toISOString(),
     };
 
+    pushBuffer(logBuffer, payload, LOG_LIMIT);
+
     if (enabled && panel) {
       panel.append(payload);
     }
 
-    if (level === "error") {
-      console.error("[Debug]", message, meta);
-    } else {
-      console.log("[Debug]", message, meta);
+    const shouldConsole = enabled || level !== "info";
+    if (shouldConsole) {
+      const method =
+        level === "error" ? "error" : level === "warn" ? "warn" : "log";
+      console[method]("[Debug]", message, meta);
     }
   }
 
-  if (enabled) {
-    window.addEventListener("error", (event) => {
-      emit("error", event.message || "Unhandled error", {
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
+  function emitCheck(name, passed, meta = {}) {
+    const entry = {
+      name,
+      passed,
+      meta,
+      timestamp: new Date().toISOString(),
+    };
+    pushBuffer(checkBuffer, entry, CHECK_LIMIT);
+    if (enabled && panel) {
+      panel.append({
+        level: passed ? "info" : "error",
+        message: `Check: ${name}`,
+        meta: { passed, ...meta },
+        timestamp: entry.timestamp,
       });
-    });
-
-    window.addEventListener("unhandledrejection", (event) => {
-      emit("error", "Unhandled promise rejection", {
-        reason: event.reason?.toString?.() ?? event.reason,
-      });
-    });
+    }
+    if (!passed) {
+      console.warn("[Debug]", `Check failed: ${name}`, meta);
+    }
   }
 
-  return {
+  window.addEventListener("error", (event) => {
+    emit("error", event.message || "Unhandled error", {
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+      stack: event.error?.stack,
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    emit("error", "Unhandled promise rejection", {
+      reason: event.reason?.toString?.() ?? event.reason,
+    });
+  });
+
+  const api = {
     enabled,
     log: (message, meta) => emit("info", message, meta),
     warn: (message, meta) => emit("warn", message, meta),
     error: (message, meta) => emit("error", message, meta),
+    check: (name, passed, meta) => emitCheck(name, passed, meta),
+    getLogs: () => [...logBuffer],
+    getChecks: () => [...checkBuffer],
+    getStatus: () => ({
+      enabled,
+      logCount: logBuffer.length,
+      checkCount: checkBuffer.length,
+    }),
     updateStats(stats) {
       if (!enabled || !panel) {
         return;
@@ -76,6 +119,14 @@ export function createDebugBus() {
       });
     },
   };
+
+  window.__CONCEPT_DEBUG__ = {
+    getLogs: api.getLogs,
+    getChecks: api.getChecks,
+    getStatus: api.getStatus,
+  };
+
+  return api;
 }
 
 function createDebugPanel() {

@@ -20,6 +20,7 @@ renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x0b0f1a, 1);
 app.appendChild(renderer.domElement);
+debug.check("renderer:context", Boolean(renderer.getContext()));
 
 const scene = new THREE.Scene();
 
@@ -29,12 +30,12 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
+debug.check("scene:initialized", Boolean(scene && camera));
 
 const cameraState = {
   radius: 7,
   yaw: Math.PI * 0.25,
   pitch: Math.PI * 0.15,
-  mode: "third",
 };
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
@@ -85,7 +86,6 @@ columnOffsets.forEach(([x, y, z]) => {
   const column = new THREE.Mesh(columnGeometry, columnMaterial);
   column.position.set(x, y, z);
   environmentGroup.add(column);
-  registerCollisionMesh(column);
 });
 
 const platformMaterial = new THREE.MeshStandardMaterial({
@@ -101,7 +101,6 @@ platforms.forEach(({ position }) => {
   const platform = new THREE.Mesh(platformGeometry, platformMaterial);
   platform.position.copy(position);
   environmentGroup.add(platform);
-  registerCollisionMesh(platform);
 });
 
 const ramp = new THREE.Mesh(
@@ -111,7 +110,6 @@ const ramp = new THREE.Mesh(
 ramp.position.set(2.5, 0.2, -4.5);
 ramp.rotation.z = -Math.PI / 12;
 environmentGroup.add(ramp);
-registerCollisionMesh(ramp);
 
 const obstacleGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
@@ -123,7 +121,6 @@ const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
   const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
   obstacle.position.copy(position);
   environmentGroup.add(obstacle);
-  registerCollisionMesh(obstacle);
 });
 
 const player = new THREE.Mesh(
@@ -139,7 +136,6 @@ const playerConfig = {
   gravity: 18,
   damping: 10,
   height: 1.6,
-  radius: 0.45,
 };
 
 const playerBody = createRigidBody({
@@ -297,10 +293,8 @@ function updateCameraPosition(delta) {
     cameraLookTarget.copy(cameraFocus);
   }
 
-  const positionLerp = 1 - Math.exp(-delta * cameraConfig.positionSmooth);
-  const lookLerp = 1 - Math.exp(-delta * cameraConfig.lookSmooth);
-  camera.position.lerp(cameraDesired, positionLerp);
-  cameraLook.lerp(cameraLookTarget, lookLerp);
+  camera.position.lerp(cameraDesired, 1 - Math.exp(-delta * 8));
+  cameraLook.lerp(cameraFocus, 1 - Math.exp(-delta * 10));
   camera.lookAt(cameraLook);
 }
 
@@ -477,7 +471,9 @@ renderer.domElement.addEventListener("pointermove", (event) => {
   const deltaY = event.clientY - pointerState.lastPointer.y;
   pointerState.lastPointer = { x: event.clientX, y: event.clientY };
 
-  applyLookDelta(deltaX, deltaY, cameraConfig.dragSensitivity);
+  cameraState.yaw -= deltaX * 0.005;
+  cameraState.pitch += deltaY * 0.005;
+  cameraState.pitch = Math.max(-1.2, Math.min(1.2, cameraState.pitch));
 });
 
 debug.attachRenderer(renderer);
