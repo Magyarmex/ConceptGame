@@ -24,3 +24,15 @@ A curated list of forward-looking concepts. Only items that are not implemented 
 ### Open Questions
 - **OPEN:** How to ensure perk choices feel meaningful without RNG.
 - **OPEN:** Whether perks remain PvE-only or are allowed in PvP.
+
+## Self-Hosted Three.js Bundle
+- **Goal:** Remove CDN reliance by vendoring a pinned Three.js module build in the repo.
+- **Value:** GitHub Pages works offline and local development is not blocked by outbound HTTPS restrictions.
+- **Risk:** Requires manual updates when Three.js is upgraded.
+- **Validation:** Confirm local static server loads without external network access.
+
+## Automated Visual Smoke Test
+- **Goal:** Add a script to capture a headless screenshot after launching the static server.
+- **Value:** Quick signal that the scene renders on GitHub Pages-style hosting.
+- **Risk:** Requires a headless browser runtime in CI.
+- **Validation:** Store a snapshot artifact and compare for regression.
