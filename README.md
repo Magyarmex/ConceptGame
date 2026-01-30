@@ -14,7 +14,8 @@ Open `http://localhost:5173/` in a browser. This prototype loads Three.js from a
 so outbound HTTPS access is required.
 
 ## Controls
-- Drag with the mouse or touch to rotate the camera.
+- Press C to toggle between third-person and first-person camera.
+- Move the mouse to look around (click to lock the pointer; drag if pointer lock is unavailable).
 - Move with WASD.
 - Jump with Space.
 
