@@ -6,8 +6,6 @@ This folder is the shared space for all game design documents. Each doc focuses 
 - [Game Vision](./Game-Vision.md)
 - [Player & Combat Design](./Player-Combat-Design.md)
 - [Minion Design](./Minion-Design.md)
-- [Maps & Objectives](./Maps-Objectives.md)
-- [Economy & Progression](./Economy-Progression.md)
 - [UX & Readability](./UX-Readability.md)
 - [Future Ideas](./Future-Ideas.md)
 
