@@ -67,11 +67,17 @@ const columnOffsets = [
   [2, 0.9, -1.5],
   [-1.5, 0.9, 2.2],
 ];
+const collisionMeshes = [];
+
+function registerCollisionMesh(mesh) {
+  collisionMeshes.push(mesh);
+}
 
 columnOffsets.forEach(([x, y, z]) => {
   const column = new THREE.Mesh(columnGeometry, columnMaterial);
   column.position.set(x, y, z);
   environmentGroup.add(column);
+  registerCollisionMesh(column);
 });
 
 const platformMaterial = new THREE.MeshStandardMaterial({
@@ -87,6 +93,7 @@ platforms.forEach(({ position }) => {
   const platform = new THREE.Mesh(platformGeometry, platformMaterial);
   platform.position.copy(position);
   environmentGroup.add(platform);
+  registerCollisionMesh(platform);
 });
 
 const ramp = new THREE.Mesh(
@@ -96,6 +103,7 @@ const ramp = new THREE.Mesh(
 ramp.position.set(2.5, 0.2, -4.5);
 ramp.rotation.z = -Math.PI / 12;
 environmentGroup.add(ramp);
+registerCollisionMesh(ramp);
 
 const obstacleGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
@@ -107,6 +115,7 @@ const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
   const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
   obstacle.position.copy(position);
   environmentGroup.add(obstacle);
+  registerCollisionMesh(obstacle);
 });
 
 const player = new THREE.Mesh(
@@ -124,10 +133,16 @@ const playerState = {
   damping: 10,
   onGround: false,
   height: 1.6,
+  radius: 0.45,
 };
 
 player.position.y = playerState.height / 2;
 playerState.onGround = true;
+
+const collisionBoxes = collisionMeshes.map((mesh) => {
+  mesh.updateWorldMatrix(true, false);
+  return new THREE.Box3().setFromObject(mesh);
+});
 
 const inputState = {
   forward: 0,
@@ -138,6 +153,78 @@ const inputState = {
 const cameraFocus = new THREE.Vector3();
 const cameraDesired = new THREE.Vector3();
 const cameraLook = new THREE.Vector3();
+const collisionNormal = new THREE.Vector3();
+
+function resolveEnvironmentCollisions() {
+  const radius = playerState.radius;
+  const halfHeight = playerState.height / 2;
+
+  playerState.onGround = false;
+
+  collisionBoxes.forEach((box) => {
+    const closestX = Math.max(box.min.x, Math.min(player.position.x, box.max.x));
+    const closestZ = Math.max(box.min.z, Math.min(player.position.z, box.max.z));
+    const dx = player.position.x - closestX;
+    const dz = player.position.z - closestZ;
+    const horizontalDistSq = dx * dx + dz * dz;
+
+    const withinVertical =
+      player.position.y + halfHeight > box.min.y &&
+      player.position.y - halfHeight < box.max.y;
+
+    if (horizontalDistSq >= radius * radius || !withinVertical) {
+      return;
+    }
+
+    if (player.position.y >= box.max.y && playerState.velocity.y <= 0) {
+      player.position.y = box.max.y + halfHeight;
+      playerState.velocity.y = 0;
+      playerState.onGround = true;
+      return;
+    }
+
+    if (player.position.y <= box.min.y && playerState.velocity.y >= 0) {
+      player.position.y = box.min.y - halfHeight;
+      playerState.velocity.y = 0;
+      return;
+    }
+
+    const horizontalDist = Math.sqrt(horizontalDistSq);
+    if (horizontalDist > 0.0001) {
+      const overlap = radius - horizontalDist;
+      const normalX = dx / horizontalDist;
+      const normalZ = dz / horizontalDist;
+      player.position.x += normalX * overlap;
+      player.position.z += normalZ * overlap;
+
+      collisionNormal.set(normalX, 0, normalZ);
+      const separatingSpeed =
+        playerState.velocity.x * collisionNormal.x +
+        playerState.velocity.z * collisionNormal.z;
+      if (separatingSpeed < 0) {
+        playerState.velocity.x -= collisionNormal.x * separatingSpeed;
+        playerState.velocity.z -= collisionNormal.z * separatingSpeed;
+      }
+      return;
+    }
+
+    const distToMinX = Math.abs(player.position.x - box.min.x);
+    const distToMaxX = Math.abs(box.max.x - player.position.x);
+    const distToMinZ = Math.abs(player.position.z - box.min.z);
+    const distToMaxZ = Math.abs(box.max.z - player.position.z);
+    const minDist = Math.min(distToMinX, distToMaxX, distToMinZ, distToMaxZ);
+
+    if (minDist === distToMinX) {
+      player.position.x = box.min.x - radius;
+    } else if (minDist === distToMaxX) {
+      player.position.x = box.max.x + radius;
+    } else if (minDist === distToMinZ) {
+      player.position.z = box.min.z - radius;
+    } else {
+      player.position.z = box.max.z + radius;
+    }
+  });
+}
 
 function updateCameraPosition(delta) {
   const { radius, yaw, pitch } = cameraState;
@@ -195,11 +282,11 @@ function animate() {
     );
   }
 
+  const wasOnGround = playerState.onGround;
   playerState.velocity.y -= playerState.gravity * delta;
-  if (playerState.onGround) {
+  if (wasOnGround) {
     if (inputState.jumpQueued) {
       playerState.velocity.y = playerState.jumpSpeed;
-      playerState.onGround = false;
     } else {
       playerState.velocity.y = Math.max(playerState.velocity.y, 0);
     }
@@ -207,6 +294,7 @@ function animate() {
   inputState.jumpQueued = false;
 
   player.position.addScaledVector(playerState.velocity, delta);
+  resolveEnvironmentCollisions();
   const groundY = playerState.height / 2;
   if (player.position.y <= groundY) {
     player.position.y = groundY;
