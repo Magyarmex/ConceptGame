@@ -17,6 +17,14 @@ so outbound HTTPS access is required.
 - Drag with the mouse or touch to rotate the camera.
 - Move with WASD.
 - Jump with Space.
+- Move the IK target with the arrow keys, and raise/lower it with R/F.
+
+## Physics + IK Modules
+- `src/physics.js` exposes a tiny rigid-body helper with semi-implicit Euler integration,
+  capsule-vs-box collision resolution, and grounding updates. Use `integrateBody` followed
+  by `resolveCollisions` each frame.
+- `src/ik.js` provides a 2-bone FABRIK solver via `solveIK(chain, target, options)` and a
+  `buildTwoBoneChain` helper for quick demos or future rigs.
 
 ## Debugging
 - Append `?debug` to the URL to enable the on-screen debug console.
