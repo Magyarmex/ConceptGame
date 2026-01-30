@@ -27,6 +27,7 @@ const cameraState = {
   radius: 7,
   yaw: Math.PI * 0.25,
   pitch: Math.PI * 0.15,
+  mode: "third",
 };
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
@@ -153,91 +154,63 @@ const inputState = {
 const cameraFocus = new THREE.Vector3();
 const cameraDesired = new THREE.Vector3();
 const cameraLook = new THREE.Vector3();
-const collisionNormal = new THREE.Vector3();
+const cameraLookTarget = new THREE.Vector3();
+const cameraForward = new THREE.Vector3();
 
-function resolveEnvironmentCollisions() {
-  const radius = playerState.radius;
-  const halfHeight = playerState.height / 2;
+const cameraConfig = {
+  thirdPerson: {
+    minPitch: -0.35,
+    maxPitch: 1.1,
+  },
+  firstPerson: {
+    minPitch: -1.2,
+    maxPitch: 1.2,
+  },
+  sensitivity: 0.0025,
+  dragSensitivity: 0.005,
+  positionSmooth: 8,
+  lookSmooth: 10,
+};
 
-  playerState.onGround = false;
+function clampPitch(value, mode) {
+  const limits =
+    mode === "first" ? cameraConfig.firstPerson : cameraConfig.thirdPerson;
+  return Math.max(limits.minPitch, Math.min(limits.maxPitch, value));
+}
 
-  collisionBoxes.forEach((box) => {
-    const closestX = Math.max(box.min.x, Math.min(player.position.x, box.max.x));
-    const closestZ = Math.max(box.min.z, Math.min(player.position.z, box.max.z));
-    const dx = player.position.x - closestX;
-    const dz = player.position.z - closestZ;
-    const horizontalDistSq = dx * dx + dz * dz;
-
-    const withinVertical =
-      player.position.y + halfHeight > box.min.y &&
-      player.position.y - halfHeight < box.max.y;
-
-    if (horizontalDistSq >= radius * radius || !withinVertical) {
-      return;
-    }
-
-    if (player.position.y >= box.max.y && playerState.velocity.y <= 0) {
-      player.position.y = box.max.y + halfHeight;
-      playerState.velocity.y = 0;
-      playerState.onGround = true;
-      return;
-    }
-
-    if (player.position.y <= box.min.y && playerState.velocity.y >= 0) {
-      player.position.y = box.min.y - halfHeight;
-      playerState.velocity.y = 0;
-      return;
-    }
-
-    const horizontalDist = Math.sqrt(horizontalDistSq);
-    if (horizontalDist > 0.0001) {
-      const overlap = radius - horizontalDist;
-      const normalX = dx / horizontalDist;
-      const normalZ = dz / horizontalDist;
-      player.position.x += normalX * overlap;
-      player.position.z += normalZ * overlap;
-
-      collisionNormal.set(normalX, 0, normalZ);
-      const separatingSpeed =
-        playerState.velocity.x * collisionNormal.x +
-        playerState.velocity.z * collisionNormal.z;
-      if (separatingSpeed < 0) {
-        playerState.velocity.x -= collisionNormal.x * separatingSpeed;
-        playerState.velocity.z -= collisionNormal.z * separatingSpeed;
-      }
-      return;
-    }
-
-    const distToMinX = Math.abs(player.position.x - box.min.x);
-    const distToMaxX = Math.abs(box.max.x - player.position.x);
-    const distToMinZ = Math.abs(player.position.z - box.min.z);
-    const distToMaxZ = Math.abs(box.max.z - player.position.z);
-    const minDist = Math.min(distToMinX, distToMaxX, distToMinZ, distToMaxZ);
-
-    if (minDist === distToMinX) {
-      player.position.x = box.min.x - radius;
-    } else if (minDist === distToMaxX) {
-      player.position.x = box.max.x + radius;
-    } else if (minDist === distToMinZ) {
-      player.position.z = box.min.z - radius;
-    } else {
-      player.position.z = box.max.z + radius;
-    }
-  });
+function updateCameraVectors(yaw, pitch) {
+  const cosPitch = Math.cos(pitch);
+  cameraForward.set(
+    Math.cos(yaw) * cosPitch,
+    Math.sin(pitch),
+    Math.sin(yaw) * cosPitch
+  );
 }
 
 function updateCameraPosition(delta) {
   const { radius, yaw, pitch } = cameraState;
+  const headOffset = playerState.height * 0.85;
   cameraFocus.copy(player.position);
-  cameraFocus.y += playerState.height * 0.6;
+  cameraFocus.y += headOffset;
 
-  const x = radius * Math.cos(pitch) * Math.cos(yaw);
-  const z = radius * Math.cos(pitch) * Math.sin(yaw);
-  const y = radius * Math.sin(pitch);
-  cameraDesired.set(cameraFocus.x + x, cameraFocus.y + y, cameraFocus.z + z);
+  updateCameraVectors(yaw, pitch);
 
-  camera.position.lerp(cameraDesired, 1 - Math.exp(-delta * 8));
-  cameraLook.lerp(cameraFocus, 1 - Math.exp(-delta * 10));
+  if (cameraState.mode === "first") {
+    cameraDesired.copy(cameraFocus);
+    cameraLookTarget.copy(cameraForward).multiplyScalar(6).add(cameraDesired);
+  } else {
+    const cameraYaw = yaw + Math.PI;
+    const x = radius * Math.cos(pitch) * Math.cos(cameraYaw);
+    const z = radius * Math.cos(pitch) * Math.sin(cameraYaw);
+    const y = radius * Math.sin(pitch);
+    cameraDesired.set(cameraFocus.x + x, cameraFocus.y + y, cameraFocus.z + z);
+    cameraLookTarget.copy(cameraFocus);
+  }
+
+  const positionLerp = 1 - Math.exp(-delta * cameraConfig.positionSmooth);
+  const lookLerp = 1 - Math.exp(-delta * cameraConfig.lookSmooth);
+  camera.position.lerp(cameraDesired, positionLerp);
+  cameraLook.lerp(cameraLookTarget, lookLerp);
   camera.lookAt(cameraLook);
 }
 
@@ -302,6 +275,8 @@ function animate() {
     playerState.onGround = true;
   }
 
+  player.rotation.y = Math.PI / 2 - cameraState.yaw;
+
   updateCameraPosition(delta);
 
   renderer.render(scene, camera);
@@ -334,36 +309,69 @@ function handleResize() {
 
 window.addEventListener("resize", handleResize);
 
-let isDragging = false;
-let lastPointer = { x: 0, y: 0 };
+const pointerState = {
+  isDragging: false,
+  isPointerLocked: false,
+  lastPointer: { x: 0, y: 0 },
+};
+
+function applyLookDelta(deltaX, deltaY, sensitivity) {
+  cameraState.yaw -= deltaX * sensitivity;
+  cameraState.pitch -= deltaY * sensitivity;
+  cameraState.pitch = clampPitch(cameraState.pitch, cameraState.mode);
+}
 
 renderer.domElement.addEventListener("pointerdown", (event) => {
-  isDragging = true;
-  lastPointer = { x: event.clientX, y: event.clientY };
+  if (event.button !== 0) {
+    return;
+  }
+
+  pointerState.isDragging = true;
+  pointerState.lastPointer = { x: event.clientX, y: event.clientY };
   renderer.domElement.setPointerCapture(event.pointerId);
+
+  if (renderer.domElement.requestPointerLock) {
+    renderer.domElement.requestPointerLock();
+  }
 });
 
 renderer.domElement.addEventListener("pointerup", (event) => {
-  isDragging = false;
+  if (event.button !== 0) {
+    return;
+  }
+
+  pointerState.isDragging = false;
   renderer.domElement.releasePointerCapture(event.pointerId);
 });
 
 renderer.domElement.addEventListener("pointerleave", () => {
-  isDragging = false;
+  pointerState.isDragging = false;
+});
+
+document.addEventListener("pointerlockchange", () => {
+  pointerState.isPointerLocked =
+    document.pointerLockElement === renderer.domElement;
 });
 
 renderer.domElement.addEventListener("pointermove", (event) => {
-  if (!isDragging) {
+  if (pointerState.isPointerLocked) {
+    applyLookDelta(
+      event.movementX,
+      event.movementY,
+      cameraConfig.sensitivity
+    );
     return;
   }
 
-  const deltaX = event.clientX - lastPointer.x;
-  const deltaY = event.clientY - lastPointer.y;
-  lastPointer = { x: event.clientX, y: event.clientY };
+  if (!pointerState.isDragging) {
+    return;
+  }
 
-  cameraState.yaw -= deltaX * 0.005;
-  cameraState.pitch -= deltaY * 0.005;
-  cameraState.pitch = Math.max(-1.2, Math.min(1.2, cameraState.pitch));
+  const deltaX = event.clientX - pointerState.lastPointer.x;
+  const deltaY = event.clientY - pointerState.lastPointer.y;
+  pointerState.lastPointer = { x: event.clientX, y: event.clientY };
+
+  applyLookDelta(deltaX, deltaY, cameraConfig.dragSensitivity);
 });
 
 debug.attachRenderer(renderer);
@@ -387,6 +395,10 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.code === "Space") {
     inputState.jumpQueued = true;
+  }
+  if (event.code === "KeyC") {
+    cameraState.mode = cameraState.mode === "third" ? "first" : "third";
+    cameraState.pitch = clampPitch(cameraState.pitch, cameraState.mode);
   }
 });
 
