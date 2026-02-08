@@ -75,6 +75,12 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
   );
 
   record(
+    "main.js:debug-readability-stats",
+    mainJs.includes("grounded: playerBody.onGround") &&
+      mainJs.includes("moveSpeed: planarSpeed")
+  );
+
+  record(
     "main.js:attack-input-queued",
     mainJs.includes("fireQueued") && mainJs.includes('event.code === "KeyE"')
   );

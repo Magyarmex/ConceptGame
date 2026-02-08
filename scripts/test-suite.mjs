@@ -359,6 +359,22 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
 
     record(results, {
       status:
+        mainJs.includes("grounded: playerBody.onGround") &&
+        mainJs.includes("moveSpeed: planarSpeed")
+          ? "pass"
+          : "fail",
+      name: "main.js:debug-readability-stats",
+      details:
+        mainJs.includes("grounded: playerBody.onGround") &&
+        mainJs.includes("moveSpeed: planarSpeed")
+          ? ""
+          : "Debug stats do not include grounded/move speed readability signals",
+      nextStep:
+        "Publish grounded state and planar move speed through debug.updateStats.",
+    });
+
+    record(results, {
+      status:
         mainJs.includes("fireQueued") && mainJs.includes('event.code === "KeyE"')
           ? "pass"
           : "fail",
