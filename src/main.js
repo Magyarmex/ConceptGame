@@ -183,7 +183,116 @@ const inputState = {
   forward: 0,
   strafe: 0,
   jumpQueued: false,
+  fireQueued: false,
 };
+
+const combatState = {
+  resourceCount: 0,
+  fireCooldown: 0,
+};
+
+const combatHud = document.createElement("div");
+combatHud.style.position = "fixed";
+combatHud.style.left = "12px";
+combatHud.style.top = "12px";
+combatHud.style.padding = "8px 10px";
+combatHud.style.background = "rgba(15, 23, 42, 0.85)";
+combatHud.style.color = "#e2e8f0";
+combatHud.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, monospace";
+combatHud.style.fontSize = "12px";
+combatHud.style.border = "1px solid rgba(148, 163, 184, 0.4)";
+combatHud.style.borderRadius = "8px";
+combatHud.style.pointerEvents = "none";
+combatHud.style.zIndex = "9999";
+app.appendChild(combatHud);
+
+function updateCombatHud() {
+  combatHud.textContent = `Resources: ${combatState.resourceCount}`;
+}
+
+updateCombatHud();
+
+const dummyGroup = new THREE.Group();
+scene.add(dummyGroup);
+
+const dummyGeometry = new THREE.CylinderGeometry(0.35, 0.35, 1.6, 12);
+const pickupGeometry = new THREE.OctahedronGeometry(0.2, 0);
+const impactGeometry = new THREE.SphereGeometry(0.08, 8, 8);
+const raycaster = new THREE.Raycaster();
+const cameraAim = new THREE.Vector2(0, 0);
+const attackOrigin = new THREE.Vector3();
+const pickupOffset = new THREE.Vector3(0, 0.2, 0);
+
+const dummies = [];
+const pickups = [];
+const impactMarkers = [];
+
+function createDummy(position) {
+  const mesh = new THREE.Mesh(
+    dummyGeometry,
+    new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0x000000 })
+  );
+  mesh.position.copy(position);
+  mesh.position.y = 0.8;
+  dummyGroup.add(mesh);
+  dummies.push({
+    mesh,
+    hp: 2,
+    flashTimer: 0,
+    defeated: false,
+    baseColor: new THREE.Color(0xdc2626),
+    flashColor: new THREE.Color(0xfef08a),
+  });
+}
+
+function spawnPickup(position) {
+  const mesh = new THREE.Mesh(
+    pickupGeometry,
+    new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x164e63 })
+  );
+  mesh.position.copy(position).add(pickupOffset);
+  scene.add(mesh);
+  pickups.push({ mesh, spinOffset: Math.random() * Math.PI * 2 });
+}
+
+function spawnImpactMarker(position) {
+  const marker = new THREE.Mesh(
+    impactGeometry,
+    new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0x475569 })
+  );
+  marker.position.copy(position);
+  scene.add(marker);
+  impactMarkers.push({ mesh: marker, ttl: 0.14 });
+}
+
+function firePlayerShot() {
+  camera.getWorldPosition(attackOrigin);
+  raycaster.setFromCamera(cameraAim, camera);
+  const activeDummies = dummies.filter((dummy) => !dummy.defeated).map((dummy) => dummy.mesh);
+  const hits = raycaster.intersectObjects(activeDummies, false);
+  if (hits.length === 0) {
+    return;
+  }
+
+  const hit = hits[0];
+  const dummy = dummies.find((entry) => entry.mesh === hit.object);
+  if (!dummy || dummy.defeated) {
+    return;
+  }
+
+  dummy.hp -= 1;
+  dummy.flashTimer = 0.15;
+  spawnImpactMarker(hit.point);
+  if (dummy.hp <= 0) {
+    dummy.defeated = true;
+    dummy.mesh.visible = false;
+    spawnPickup(dummy.mesh.position);
+  }
+}
+
+createDummy(new THREE.Vector3(2.5, 0, 0.6));
+createDummy(new THREE.Vector3(3.7, 0, -1.5));
+createDummy(new THREE.Vector3(1.8, 0, -2.2));
 
 const ikGroup = new THREE.Group();
 scene.add(ikGroup);
@@ -357,6 +466,13 @@ function animate() {
   updateStaticColliders();
   resolveCollisions(playerBody, playerCollider, staticColliders);
 
+  combatState.fireCooldown = Math.max(0, combatState.fireCooldown - delta);
+  if (inputState.fireQueued && combatState.fireCooldown <= 0) {
+    firePlayerShot();
+    combatState.fireCooldown = 0.18;
+  }
+  inputState.fireQueued = false;
+
   player.position.copy(playerBody.position);
   player.rotation.y = Math.PI / 2 - cameraState.yaw;
 
@@ -381,6 +497,37 @@ function animate() {
   updateBoneMesh(boneMeshes[1], ikResult.joints[1], ikResult.joints[2]);
 
   updateCameraPosition(delta);
+
+  dummies.forEach((dummy) => {
+    if (dummy.flashTimer > 0) {
+      dummy.flashTimer = Math.max(0, dummy.flashTimer - delta);
+    }
+    const intensity = dummy.flashTimer > 0 ? dummy.flashTimer / 0.15 : 0;
+    dummy.mesh.material.color.copy(dummy.baseColor).lerp(dummy.flashColor, intensity);
+  });
+
+  for (let index = pickups.length - 1; index >= 0; index -= 1) {
+    const pickup = pickups[index];
+    pickup.mesh.rotation.y += delta * 2.6;
+    pickup.mesh.position.y = 0.35 + Math.sin(elapsed * 3 + pickup.spinOffset) * 0.08;
+    if (pickup.mesh.position.distanceTo(playerBody.position) < 1) {
+      scene.remove(pickup.mesh);
+      pickups.splice(index, 1);
+      combatState.resourceCount += 1;
+      updateCombatHud();
+    }
+  }
+
+  for (let index = impactMarkers.length - 1; index >= 0; index -= 1) {
+    const marker = impactMarkers[index];
+    marker.ttl -= delta;
+    if (marker.ttl <= 0) {
+      scene.remove(marker.mesh);
+      impactMarkers.splice(index, 1);
+      continue;
+    }
+    marker.mesh.scale.setScalar(1 + (0.14 - marker.ttl) * 5);
+  }
 
   renderer.render(scene, camera);
 
@@ -520,6 +667,9 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.code === "KeyF") {
     ikTargetState.lift = -1;
+  }
+  if (event.code === "KeyE") {
+    inputState.fireQueued = true;
   }
 });
 

@@ -1,16 +1,14 @@
 # Project Futures
 
-## Camera & Control Ideas
-- Add a subtle camera collision/pushback volume to prevent clipping through nearby geometry in tight spaces.
-- Offer a per-mode sensitivity slider and invert-Y toggle in an in-game settings panel.
-- Add a soft follow camera spring for third-person to emphasize momentum when sprinting or landing.
-- Add a left/right camera invert toggle so players can choose their preferred horizontal look direction. (Value: player comfort; Cost: low; Risk: minimal; Validation: toggle and confirm A/D + mouse feel aligns with expectation.)
-- Add an on-screen input direction indicator for strafing/turning to validate control mappings quickly during playtests. (Value: faster debugging; Cost: low; Risk: minimal; Validation: verify arrows match actual motion while pressing WASD/moving mouse.)
+## Combat Readability Ideas
+- Add a lightweight center reticle that briefly expands on confirmed hits. (Value: clearer shot confirmation; Cost: low; Risk: visual clutter if oversized; Validation: verify users can distinguish hit vs miss in a 30-second playtest.)
+- Add a tiny floating `+1` resource text when a pickup is collected. (Value: stronger reward readability; Cost: low; Risk: spam during rapid pickups; Validation: collect 5 pickups and ensure text is legible but fades quickly.)
+- Add an optional miss indicator spark at max range when a shot does not hit a dummy. (Value: preserves aiming feedback on misses; Cost: low; Risk: noisy effects; Validation: fire into empty space and confirm one short-lived marker appears.)
 
-## Movement & Collision Ideas
-- Add a dedicated camera collision volume pass (separate from player collisions) so the camera can smoothly push in without jitter. (Value: cleaner framing in tight spaces; Cost: low-medium; Risk: camera jitter if tuned poorly; Validation: walk near columns/obstacles and confirm no clipping.)
-- Upgrade ramp handling to project movement along the ramp plane for smoother ascent/descent. (Value: better readability on slopes; Cost: medium; Risk: edge-case sliding; Validation: walk up/down the ramp and confirm stable grounding.)
+## Encounter Iteration Ideas
+- Add timed dummy respawn points with a visible cooldown ring. (Value: repeatable loop testing; Cost: medium; Risk: pacing confusion; Validation: defeat dummy and confirm deterministic respawn timing.)
+- Add two dummy archetypes (stationary and slow strafing) to test aim tracking. (Value: improves skill-expression testing; Cost: medium; Risk: early AI complexity creep; Validation: compare hit-rate variance across both archetypes.)
 
-## Diagnostics & Tooling Ideas
-- Add a lightweight JSON export mode to the diagnostics suite for CI dashboards. (Value: easier CI triage; Cost: low; Risk: minimal; Validation: confirm JSON output parses in CI.)
-- Provide a guided troubleshooting wizard that maps common error codes to fixes. (Value: faster onboarding; Cost: low-medium; Risk: outdated guidance; Validation: run through CG-E001/CG-E002 scenarios and confirm guidance accuracy.)
+## Economy & Progression Ideas
+- Add a spend sink in debug UI (e.g., spend 5 resources to spawn a practice wave). (Value: validates gather/spend loop early; Cost: low-medium; Risk: placeholder tuning noise; Validation: gather resources, spend threshold, and verify deterministic outcome.)
+- Add per-run resource stats in the debug panel (shots fired, hits, pickups collected). (Value: faster balancing iteration; Cost: low; Risk: stat drift if counters reset incorrectly; Validation: run one session and verify counters match observed actions.)

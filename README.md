@@ -17,6 +17,7 @@ so outbound HTTPS access is required.
 - Drag with the mouse or touch to rotate the camera.
 - Move with WASD.
 - Jump with Space.
+- Fire a basic shot with E.
 - Move the IK target with the arrow keys, and raise/lower it with R/F.
 
 ## Physics + IK Modules

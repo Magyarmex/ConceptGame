@@ -73,6 +73,27 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
     "main.js:first-person-look-target",
     mainJs.includes('const lookTarget = cameraState.mode === "first" ? cameraLookTarget : cameraFocus;')
   );
+
+  record(
+    "main.js:attack-input-queued",
+    mainJs.includes("fireQueued") && mainJs.includes('event.code === "KeyE"')
+  );
+  record(
+    "main.js:combat-shot-handler",
+    mainJs.includes("function firePlayerShot()") && mainJs.includes("raycaster.intersectObjects")
+  );
+  record(
+    "main.js:dummy-spawn",
+    mainJs.includes("function createDummy(position)") && (mainJs.match(/createDummy\(/g) ?? []).length > 1
+  );
+  record(
+    "main.js:pickup-loop",
+    mainJs.includes("function spawnPickup(position)") && mainJs.includes("combatState.resourceCount += 1")
+  );
+  record(
+    "main.js:resource-counter-visible",
+    mainJs.includes("Resources: ${combatState.resourceCount}")
+  );
 }
 
 if (fs.existsSync(path.join(root, "src/debug.js"))) {
