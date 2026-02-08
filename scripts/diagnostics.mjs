@@ -54,6 +54,25 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
     "main.js:collision-volumes-from-registered-meshes",
     mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => ({")
   );
+
+  record(
+    "main.js:look-delta-unified",
+    mainJs.includes("applyLookDelta(deltaX, deltaY, cameraState.dragSensitivity)")
+  );
+  record(
+    "main.js:look-sign-convention",
+    mainJs.includes("cameraState.yaw += deltaX * sensitivity") &&
+      mainJs.includes("cameraState.pitch -= deltaY * sensitivity")
+  );
+  record(
+    "main.js:first-person-free-look-bounds",
+    mainJs.includes("minPitch: -Math.PI / 2 + 0.01") &&
+      mainJs.includes("maxPitch: Math.PI / 2 - 0.01")
+  );
+  record(
+    "main.js:first-person-look-target",
+    mainJs.includes('const lookTarget = cameraState.mode === "first" ? cameraLookTarget : cameraFocus;')
+  );
 }
 
 if (fs.existsSync(path.join(root, "src/debug.js"))) {
