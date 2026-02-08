@@ -152,6 +152,16 @@ const mapMaterials = {
   cover: new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.74 }),
 };
 
+const mapMaterialSlots = {
+  spawn: "base",
+  mid: "column",
+  upper: "platform",
+  flank: "ramp",
+  cover: "obstacle",
+};
+
+debug.check("style:map-materials-ready", Object.keys(mapMaterialSlots).every((key) => Boolean(mapMaterials[key])));
+
 function createMapSection(name) {
   const section = new THREE.Group();
   section.name = name;
@@ -680,19 +690,31 @@ function applyVisualStyle(mode) {
     gridMaterials[1].needsUpdate = true;
   }
 
-  [
-    [floor.material, "floor"],
-    [baseMaterial, "base"],
-    [columnMaterial, "column"],
-    [platformMaterial, "platform"],
-    [ramp.material, "ramp"],
-    [obstacleMaterial, "obstacle"],
-    [player.material, "player"],
-    [rigBase.material, "rigBase"],
-    [ikTarget.material, "ikTarget"],
-    [jointMaterial, "joint"],
-    [boneMaterial, "bone"],
-  ].forEach(([material, slot]) => applyMaterialPreset(material, slot));
+  const materialAssignments = [
+    [floor.material, "floor", "floor"],
+    [mapMaterials.spawn, "base", "map:spawn"],
+    [mapMaterials.mid, "column", "map:mid"],
+    [mapMaterials.upper, "platform", "map:upper"],
+    [mapMaterials.flank, "ramp", "map:flank"],
+    [mapMaterials.cover, "obstacle", "map:cover"],
+    [player.material, "player", "player"],
+    [rigBase.material, "rigBase", "ik:rig-base"],
+    [ikTarget.material, "ikTarget", "ik:target"],
+    [jointMaterial, "joint", "ik:joints"],
+    [boneMaterial, "bone", "ik:bones"],
+  ];
+
+  debug.check("style:material-assignments-complete", materialAssignments.every(([material]) => Boolean(material)), {
+    mode,
+  });
+
+  materialAssignments.forEach(([material, slot, label]) => {
+    if (!material) {
+      debug.check(`style:${label}:material`, false, { mode, slot });
+      return;
+    }
+    applyMaterialPreset(material, slot);
+  });
 
   dummies.forEach((dummy) => {
     applyMaterialPreset(dummy.mesh.material, "enemy");

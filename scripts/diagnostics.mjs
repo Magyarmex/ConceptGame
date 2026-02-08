@@ -31,6 +31,10 @@ if (fs.existsSync(path.join(root, "index.html"))) {
     "index.html:module-script",
     indexHtml.includes('type="module"') && indexHtml.includes("src/main.js")
   );
+  record(
+    "index.html:cache-bust-v2",
+    indexHtml.includes("style.css?v=2") && indexHtml.includes("main.js?v=2")
+  );
 }
 
 if (fs.existsSync(path.join(root, "src/main.js"))) {
@@ -130,6 +134,22 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
   record(
     "main.js:resource-counter-visible",
     mainJs.includes("Resources: ${combatState.resourceCount}")
+  );
+  record(
+    "main.js:visual-style-no-orphan-material-references",
+    !mainJs.includes("baseMaterial") &&
+      !mainJs.includes("columnMaterial") &&
+      !mainJs.includes("platformMaterial") &&
+      !mainJs.includes("obstacleMaterial") &&
+      !mainJs.includes("ramp.material")
+  );
+  record(
+    "main.js:visual-style-map-materials-wired",
+    mainJs.includes("mapMaterials.spawn") &&
+      mainJs.includes("mapMaterials.mid") &&
+      mainJs.includes("mapMaterials.upper") &&
+      mainJs.includes("mapMaterials.flank") &&
+      mainJs.includes("mapMaterials.cover")
   );
 
   record(
