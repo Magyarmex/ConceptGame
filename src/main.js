@@ -5,6 +5,7 @@ import {
   createRigidBody,
   integrateBody,
   resolveCollisions,
+  applyPlanarInertia,
 } from "./physics.js";
 import { buildTwoBoneChain, solveIK } from "./ik.js";
 
@@ -88,6 +89,21 @@ const columnOffsets = [
   [-1.5, 0.9, 2.2],
 ];
 const collisionMeshes = [];
+const MIN_REGISTERED_COLLIDERS = 9;
+const colliderDebugHelpers = [];
+
+function createColliderDebugHelper(localBox) {
+  const size = localBox.getSize(new THREE.Vector3());
+  const center = localBox.getCenter(new THREE.Vector3());
+  const helper = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(size.x, size.y, size.z)),
+    new THREE.LineBasicMaterial({ color: 0x22d3ee })
+  );
+  helper.matrixAutoUpdate = false;
+  helper.visible = debug.enabled;
+  helper.userData.center = center;
+  return helper;
+}
 
 function registerCollisionMesh(mesh) {
   collisionMeshes.push(mesh);
@@ -146,11 +162,14 @@ player.position.set(0, 1.2, 0);
 scene.add(player);
 
 const playerConfig = {
-  moveSpeed: 5,
+  moveSpeed: 5.2,
   jumpSpeed: 6.5,
   gravity: 18,
-  damping: 10,
-  height: 1.6,
+  groundAcceleration: 32,
+  airAcceleration: 9,
+  groundDrag: 16,
+  airDrag: 2.2,
+  height: 2,
   radius: 0.45,
 };
 
@@ -167,17 +186,39 @@ const playerCollider = createCapsuleCollider({
 
 player.position.copy(playerBody.position);
 
-const collisionVolumes = collisionMeshes.map((mesh) => ({
-  mesh,
-  box: new THREE.Box3(),
-}));
+const collisionVolumes = collisionMeshes.map((mesh) => {
+  mesh.geometry.computeBoundingBox();
+  const box = mesh.geometry.boundingBox.clone();
+  const debugHelper = createColliderDebugHelper(box);
+  scene.add(debugHelper);
+  colliderDebugHelpers.push({ mesh, helper: debugHelper, center: box.getCenter(new THREE.Vector3()) });
+  return {
+    mesh,
+    box,
+    worldMatrix: new THREE.Matrix4(),
+    inverseWorldMatrix: new THREE.Matrix4(),
+  };
+});
 const floorCollider = {
   box: new THREE.Box3(
     new THREE.Vector3(-10, -0.1, -10),
     new THREE.Vector3(10, 0.1, 10)
   ),
+  worldMatrix: new THREE.Matrix4(),
+  inverseWorldMatrix: new THREE.Matrix4(),
 };
 const staticColliders = [...collisionVolumes, floorCollider];
+
+debug.check("physics:player-collider-dimensions",
+  Number.isFinite(playerCollider.radius) &&
+    Number.isFinite(playerCollider.halfHeight) &&
+    playerCollider.radius > 0 &&
+    playerCollider.halfHeight > 0
+);
+debug.check("physics:static-collider-count", collisionVolumes.length >= MIN_REGISTERED_COLLIDERS, {
+  count: collisionVolumes.length,
+  expectedMinimum: MIN_REGISTERED_COLLIDERS,
+});
 
 const inputState = {
   forward: 0,
@@ -443,7 +484,6 @@ const cameraForward = new THREE.Vector3();
 const movementForward = new THREE.Vector3();
 const movementRight = new THREE.Vector3();
 const moveDirection = new THREE.Vector3();
-const targetVelocity = new THREE.Vector3();
 
 function clampPitch(value, mode) {
   const limits =
@@ -487,10 +527,19 @@ function updateCameraPosition(delta) {
   camera.lookAt(cameraLook);
 }
 
+const tempColliderMatrix = new THREE.Matrix4();
+
 const updateStaticColliders = () => {
-  collisionVolumes.forEach(({ mesh, box }) => {
-    mesh.updateWorldMatrix(true, false);
-    box.setFromObject(mesh);
+  collisionVolumes.forEach((collider) => {
+    collider.mesh.updateWorldMatrix(true, false);
+    collider.worldMatrix.copy(collider.mesh.matrixWorld);
+    collider.inverseWorldMatrix.copy(collider.worldMatrix).invert();
+  });
+
+  colliderDebugHelpers.forEach(({ mesh, helper, center }) => {
+    tempColliderMatrix.makeTranslation(center.x, center.y, center.z);
+    helper.matrix.multiplyMatrices(mesh.matrixWorld, tempColliderMatrix);
+    helper.visible = debug.enabled;
   });
 };
 
@@ -518,21 +567,13 @@ function animate() {
     moveDirection.normalize();
   }
 
-  targetVelocity
-    .copy(moveDirection)
-    .multiplyScalar(playerConfig.moveSpeed);
-  playerBody.velocity.x = THREE.MathUtils.damp(
-    playerBody.velocity.x,
-    targetVelocity.x,
-    playerConfig.damping,
-    delta
-  );
-  playerBody.velocity.z = THREE.MathUtils.damp(
-    playerBody.velocity.z,
-    targetVelocity.z,
-    playerConfig.damping,
-    delta
-  );
+  applyPlanarInertia(playerBody, moveDirection, delta, {
+    maxSpeed: playerConfig.moveSpeed,
+    groundAcceleration: playerConfig.groundAcceleration,
+    airAcceleration: playerConfig.airAcceleration,
+    groundDrag: playerConfig.groundDrag,
+    airDrag: playerConfig.airDrag,
+  });
 
   if (playerBody.onGround && inputState.jumpQueued) {
     playerBody.velocity.y = playerConfig.jumpSpeed;

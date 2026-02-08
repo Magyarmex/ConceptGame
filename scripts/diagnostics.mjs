@@ -52,7 +52,24 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
   );
   record(
     "main.js:collision-volumes-from-registered-meshes",
-    mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => ({")
+    mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => {")
+  );
+
+  record(
+    "main.js:inertia-helper-used",
+    mainJs.includes("applyPlanarInertia") &&
+      mainJs.includes("groundAcceleration") &&
+      mainJs.includes("airDrag")
+  );
+  record(
+    "main.js:collision-registration-min-count",
+    mainJs.includes("const MIN_REGISTERED_COLLIDERS = 9") &&
+      mainJs.includes("collisionVolumes.length >= MIN_REGISTERED_COLLIDERS")
+  );
+  record(
+    "main.js:debug-collider-checks",
+    mainJs.includes("physics:player-collider-dimensions") &&
+      mainJs.includes("physics:static-collider-count")
   );
 
   record(

@@ -3,6 +3,8 @@ import * as THREE from "https://unpkg.com/three@0.168.0/build/three.module.js";
 const tempVectorA = new THREE.Vector3();
 const tempVectorB = new THREE.Vector3();
 const tempVectorC = new THREE.Vector3();
+const tempVectorD = new THREE.Vector3();
+const tempMatrixB = new THREE.Matrix3();
 
 export function createRigidBody({
   position = new THREE.Vector3(),
@@ -25,6 +27,32 @@ export function createCapsuleCollider({ radius, halfHeight }) {
   return { radius, halfHeight };
 }
 
+export function applyPlanarInertia(body, moveDirection, delta, config = {}) {
+  const maxSpeed = config.maxSpeed ?? 5;
+  const acceleration = body.onGround
+    ? config.groundAcceleration ?? 28
+    : config.airAcceleration ?? 10;
+  const drag = body.onGround
+    ? config.groundDrag ?? 14
+    : config.airDrag ?? 2.5;
+  const inputStrength = Math.min(1, moveDirection.length());
+
+  if (inputStrength > 0) {
+    tempVectorA
+      .copy(moveDirection)
+      .normalize()
+      .multiplyScalar(maxSpeed * inputStrength);
+    const accelStep = Math.min(1, acceleration * delta);
+    body.velocity.x += (tempVectorA.x - body.velocity.x) * accelStep;
+    body.velocity.z += (tempVectorA.z - body.velocity.z) * accelStep;
+    return;
+  }
+
+  const dragStep = Math.exp(-drag * delta);
+  body.velocity.x *= dragStep;
+  body.velocity.z *= dragStep;
+}
+
 export function integrateBody(body, delta, gravity) {
   body.velocity.addScaledVector(body.acceleration, delta);
   body.velocity.y -= gravity * body.gravityScale * delta;
@@ -32,57 +60,64 @@ export function integrateBody(body, delta, gravity) {
   body.acceleration.set(0, 0, 0);
 }
 
-function computeCapsuleBoxContact(body, capsule, box, out) {
-  const segMinY = body.position.y - capsule.halfHeight;
-  const segMaxY = body.position.y + capsule.halfHeight;
-  let closestY = body.position.y;
+function computeCapsuleBoxContact(body, capsule, collider, out) {
+  const box = collider.box;
+
+  tempVectorA.copy(body.position);
+  if (collider.inverseWorldMatrix) {
+    tempVectorA.applyMatrix4(collider.inverseWorldMatrix);
+  }
+
+  const segMinY = tempVectorA.y - capsule.halfHeight;
+  const segMaxY = tempVectorA.y + capsule.halfHeight;
+  let closestY = tempVectorA.y;
 
   if (segMaxY < box.min.y) {
     closestY = segMaxY;
   } else if (segMinY > box.max.y) {
     closestY = segMinY;
   } else {
-    closestY = THREE.MathUtils.clamp(body.position.y, box.min.y, box.max.y);
+    closestY = THREE.MathUtils.clamp(tempVectorA.y, box.min.y, box.max.y);
   }
 
-  tempVectorA.set(body.position.x, closestY, body.position.z);
-  box.clampPoint(tempVectorA, tempVectorB);
-  tempVectorC.subVectors(tempVectorA, tempVectorB);
+  tempVectorC.set(tempVectorA.x, closestY, tempVectorA.z);
+  box.clampPoint(tempVectorC, tempVectorD);
+  tempVectorB.subVectors(tempVectorC, tempVectorD);
 
-  let distance = tempVectorC.length();
+  let distance = tempVectorB.length();
   let penetration = capsule.radius - distance;
 
   if (distance === 0) {
     const distX = Math.min(
-      Math.abs(tempVectorA.x - box.min.x),
-      Math.abs(box.max.x - tempVectorA.x)
+      Math.abs(tempVectorC.x - box.min.x),
+      Math.abs(box.max.x - tempVectorC.x)
     );
     const distY = Math.min(
-      Math.abs(tempVectorA.y - box.min.y),
-      Math.abs(box.max.y - tempVectorA.y)
+      Math.abs(tempVectorC.y - box.min.y),
+      Math.abs(box.max.y - tempVectorC.y)
     );
     const distZ = Math.min(
-      Math.abs(tempVectorA.z - box.min.z),
-      Math.abs(box.max.z - tempVectorA.z)
+      Math.abs(tempVectorC.z - box.min.z),
+      Math.abs(box.max.z - tempVectorC.z)
     );
     const minDist = Math.min(distX, distY, distZ);
     if (minDist === distX) {
-      tempVectorC.set(
-        tempVectorA.x > (box.min.x + box.max.x) * 0.5 ? 1 : -1,
+      tempVectorB.set(
+        tempVectorC.x > (box.min.x + box.max.x) * 0.5 ? 1 : -1,
         0,
         0
       );
     } else if (minDist === distY) {
-      tempVectorC.set(
+      tempVectorB.set(
         0,
-        tempVectorA.y > (box.min.y + box.max.y) * 0.5 ? 1 : -1,
+        tempVectorC.y > (box.min.y + box.max.y) * 0.5 ? 1 : -1,
         0
       );
     } else {
-      tempVectorC.set(
+      tempVectorB.set(
         0,
         0,
-        tempVectorA.z > (box.min.z + box.max.z) * 0.5 ? 1 : -1
+        tempVectorC.z > (box.min.z + box.max.z) * 0.5 ? 1 : -1
       );
     }
     penetration = capsule.radius + minDist;
@@ -93,7 +128,11 @@ function computeCapsuleBoxContact(body, capsule, box, out) {
     return false;
   }
 
-  out.normal.copy(tempVectorC).divideScalar(distance);
+  out.normal.copy(tempVectorB).divideScalar(distance);
+  if (collider.worldMatrix) {
+    tempMatrixB.setFromMatrix4(collider.worldMatrix);
+    out.normal.applyMatrix3(tempMatrixB).normalize();
+  }
   out.penetration = penetration;
   return true;
 }
@@ -110,7 +149,7 @@ export function resolveCollisions(body, capsule, colliders, options = {}) {
   for (let i = 0; i < iterations; i += 1) {
     let hadCollision = false;
     for (const collider of colliders) {
-      if (!computeCapsuleBoxContact(body, capsule, collider.box, contact)) {
+      if (!computeCapsuleBoxContact(body, capsule, collider, contact)) {
         continue;
       }
 
