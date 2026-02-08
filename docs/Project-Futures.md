@@ -10,3 +10,7 @@
 ## Movement & Collision Ideas
 - Add a dedicated camera collision volume pass (separate from player collisions) so the camera can smoothly push in without jitter. (Value: cleaner framing in tight spaces; Cost: low-medium; Risk: camera jitter if tuned poorly; Validation: walk near columns/obstacles and confirm no clipping.)
 - Upgrade ramp handling to project movement along the ramp plane for smoother ascent/descent. (Value: better readability on slopes; Cost: medium; Risk: edge-case sliding; Validation: walk up/down the ramp and confirm stable grounding.)
+
+## Diagnostics & Tooling Ideas
+- Add a lightweight JSON export mode to the diagnostics suite for CI dashboards. (Value: easier CI triage; Cost: low; Risk: minimal; Validation: confirm JSON output parses in CI.)
+- Provide a guided troubleshooting wizard that maps common error codes to fixes. (Value: faster onboarding; Cost: low-medium; Risk: outdated guidance; Validation: run through CG-E001/CG-E002 scenarios and confirm guidance accuracy.)
