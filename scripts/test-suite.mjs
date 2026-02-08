@@ -257,6 +257,53 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
         : "Missing #app querySelector",
       nextStep: "Ensure src/main.js mounts to #app element.",
     });
+    record(results, {
+      status:
+        /radius:\s*\d*\.?\d+/.test(mainJs) &&
+        mainJs.includes("radius: playerConfig.radius")
+          ? "pass"
+          : "fail",
+      name: "main.js:player-radius-config",
+      details:
+        /radius:\s*\d*\.?\d+/.test(mainJs) &&
+        mainJs.includes("radius: playerConfig.radius")
+          ? ""
+          : "Player capsule radius config missing or not wired",
+      nextStep:
+        "Set playerConfig.radius and ensure createCapsuleCollider uses playerConfig.radius.",
+    });
+    record(results, {
+      status: mainJs.includes("halfHeight: (playerConfig.height - playerConfig.radius * 2) / 2")
+        ? "pass"
+        : "fail",
+      name: "main.js:player-halfheight-uses-radius",
+      details: mainJs.includes("halfHeight: (playerConfig.height - playerConfig.radius * 2) / 2")
+        ? ""
+        : "Capsule halfHeight no longer derived from configured radius",
+      nextStep:
+        "Compute capsule halfHeight from playerConfig.height and playerConfig.radius.",
+    });
+    record(results, {
+      status: (mainJs.match(/registerCollisionMesh\(/g) ?? []).length > 1 ? "pass" : "fail",
+      name: "main.js:collision-registration-nonempty",
+      details:
+        (mainJs.match(/registerCollisionMesh\(/g) ?? []).length > 1
+          ? ""
+          : "No static meshes are registered for collision",
+      nextStep:
+        "Register static blockers via registerCollisionMesh during world setup.",
+    });
+    record(results, {
+      status: mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => ({")
+        ? "pass"
+        : "fail",
+      name: "main.js:collision-volumes-from-registered-meshes",
+      details: mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => ({")
+        ? ""
+        : "collisionVolumes is not built from registered collisionMeshes",
+      nextStep:
+        "Build collisionVolumes from collisionMeshes so registered static geometry blocks movement.",
+    });
   }
 
   await runImportChecks(results);
