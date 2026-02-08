@@ -18,6 +18,7 @@ const logBuffer = [];
 const checkBuffer = [];
 const errorDedup = new Map();
 let lastError = null;
+const telemetryCollectors = new Set();
 
 function pushBuffer(buffer, entry, limit) {
   buffer.push(entry);
@@ -186,6 +187,22 @@ export function createDebugBus() {
       }
 
       panel.setMetrics(stats);
+    },
+    publishTelemetry(channel, payload) {
+      telemetryCollectors.forEach((collector) => {
+        try {
+          collector({ channel, payload, timestamp: new Date().toISOString() });
+        } catch (error) {
+          emit("warn", "Telemetry collector failed", { reason: String(error), channel });
+        }
+      });
+    },
+    registerTelemetryCollector(collector) {
+      if (typeof collector !== "function") {
+        return () => {};
+      }
+      telemetryCollectors.add(collector);
+      return () => telemetryCollectors.delete(collector);
     },
     attachRenderer(renderer) {
       if (!enabled || !panel) {

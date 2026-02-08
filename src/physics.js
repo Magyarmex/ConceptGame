@@ -139,19 +139,29 @@ function computeCapsuleBoxContact(body, capsule, collider, out) {
 
 export function resolveCollisions(body, capsule, colliders, options = {}) {
   const iterations = options.iterations ?? 3;
+  const onContact = typeof options.onContact === "function" ? options.onContact : null;
   const contact = {
     normal: new THREE.Vector3(),
     penetration: 0,
+  };
+  const summary = {
+    contacts: 0,
+    maxPenetration: 0,
+    groundContacts: 0,
   };
 
   body.onGround = false;
 
   for (let i = 0; i < iterations; i += 1) {
     let hadCollision = false;
-    for (const collider of colliders) {
+    for (let colliderIndex = 0; colliderIndex < colliders.length; colliderIndex += 1) {
+      const collider = colliders[colliderIndex];
       if (!computeCapsuleBoxContact(body, capsule, collider, contact)) {
         continue;
       }
+
+      summary.contacts += 1;
+      summary.maxPenetration = Math.max(summary.maxPenetration, contact.penetration);
 
       body.position.addScaledVector(contact.normal, contact.penetration);
       const velocityIntoSurface = body.velocity.dot(contact.normal);
@@ -160,6 +170,14 @@ export function resolveCollisions(body, capsule, colliders, options = {}) {
       }
       if (contact.normal.y > 0.5) {
         body.onGround = true;
+        summary.groundContacts += 1;
+      }
+      if (onContact) {
+        onContact({
+          colliderIndex,
+          penetration: contact.penetration,
+          normal: contact.normal,
+        });
       }
       hadCollision = true;
     }
@@ -167,4 +185,6 @@ export function resolveCollisions(body, capsule, colliders, options = {}) {
       break;
     }
   }
+
+  return summary;
 }

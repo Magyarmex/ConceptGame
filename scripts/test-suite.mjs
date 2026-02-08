@@ -213,6 +213,7 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
   checkFileExists(results, "src/main.js");
   checkFileExists(results, "src/debug.js");
   checkFileExists(results, "docs/Debugging.md");
+  checkFileExists(results, "scripts/agent-dev-workflow.mjs");
 
   if (fs.existsSync(path.join(root, "index.html"))) {
     const indexHtml = readFile("index.html");
@@ -236,6 +237,25 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
           : "Missing module script for src/main.js",
       nextStep:
         "Add a <script type=\"module\" src=\"src/main.js\"></script> tag.",
+    });
+  }
+
+  if (fs.existsSync(path.join(root, "scripts/agent-dev-workflow.mjs"))) {
+    const workflow = readFile("scripts/agent-dev-workflow.mjs");
+    record(results, {
+      status:
+        workflow.includes("__CONCEPT_AGENT_HARNESS__") &&
+        workflow.includes("runScenarioInPage")
+          ? "pass"
+          : "fail",
+      name: "agent-dev-workflow:harness-runner",
+      details:
+        workflow.includes("__CONCEPT_AGENT_HARNESS__") &&
+        workflow.includes("runScenarioInPage")
+          ? ""
+          : "Workflow is not driving the in-page harness API.",
+      nextStep:
+        "Use browser automation to invoke window.__CONCEPT_AGENT_HARNESS__ and persist real traces.",
     });
   }
 

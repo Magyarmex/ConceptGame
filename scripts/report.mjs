@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runTestSuite } from "./test-suite.mjs";
 
@@ -42,6 +44,24 @@ export async function generateReport() {
   } else {
     console.log("- Share this report with the team and keep monitoring.");
   }
+
+  const artifactDir = path.join(process.cwd(), "artifacts", "reports");
+  fs.mkdirSync(artifactDir, { recursive: true });
+  const artifactPath = path.join(artifactDir, `report-${Date.now()}.json`);
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    summary,
+    failed,
+    warnings,
+    action: failed.length
+      ? "Fix failed checks"
+      : warnings.length
+        ? "Address warnings for full coverage"
+        : "Maintain current quality bar",
+  };
+  fs.writeFileSync(artifactPath, JSON.stringify(payload, null, 2));
+  console.log(`\nJSON artifact: ${artifactPath}`);
+  return { artifactPath, payload };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

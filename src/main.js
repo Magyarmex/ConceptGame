@@ -12,6 +12,8 @@ import { buildTwoBoneChain, solveIK } from "./ik.js";
 const debug = createDebugBus();
 const app = document.querySelector("#app");
 const urlParams = new URLSearchParams(window.location.search);
+const devMode = urlParams.has("dev");
+const runScriptParam = urlParams.get("runScript") || "";
 
 if (!app) {
   throw new Error("Missing #app element for Three.js mount.");
@@ -143,6 +145,18 @@ scene.add(environmentGroup);
 const collisionMeshes = [];
 const MIN_REGISTERED_COLLIDERS = 9;
 const colliderDebugHelpers = [];
+const occupiedVolumeHelpers = [];
+const entityRegistry = [];
+let entityCounter = 0;
+
+function registerEntity(mesh, tag) {
+  entityCounter += 1;
+  const entity = { id: `ent-${entityCounter}`, mesh, tag };
+  mesh.userData.entityId = entity.id;
+  mesh.userData.entityTag = tag;
+  entityRegistry.push(entity);
+  return entity;
+}
 
 const mapMaterials = {
   spawn: new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85 }),
@@ -176,6 +190,7 @@ function addMapBlock(section, { size, position, rotation, material, collidable =
     mesh.rotation.set(rotation[0], rotation[1], rotation[2]);
   }
   section.add(mesh);
+  registerEntity(mesh, `map:${section.name}`);
   if (collidable) {
     registerCollisionMesh(mesh);
   }
@@ -246,7 +261,20 @@ function createColliderDebugHelper(localBox) {
     new THREE.LineBasicMaterial({ color: 0x22d3ee })
   );
   helper.matrixAutoUpdate = false;
-  helper.visible = debug.enabled;
+  helper.visible = debug.enabled || devMode;
+  helper.userData.center = center;
+  return helper;
+}
+
+function createOccupiedVolumeHelper(localBox) {
+  const size = localBox.getSize(new THREE.Vector3());
+  const center = localBox.getCenter(new THREE.Vector3());
+  const helper = new THREE.Mesh(
+    new THREE.BoxGeometry(size.x, size.y, size.z),
+    new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.12, depthWrite: false })
+  );
+  helper.matrixAutoUpdate = false;
+  helper.visible = false;
   helper.userData.center = center;
   return helper;
 }
@@ -261,6 +289,7 @@ const player = new THREE.Mesh(
 );
 player.position.set(-7.5, 1.2, 0);
 scene.add(player);
+registerEntity(player, "player");
 
 const playerConfig = {
   moveSpeed: 5.2,
@@ -291,8 +320,11 @@ const collisionVolumes = collisionMeshes.map((mesh) => {
   mesh.geometry.computeBoundingBox();
   const box = mesh.geometry.boundingBox.clone();
   const debugHelper = createColliderDebugHelper(box);
+  const occupiedHelper = createOccupiedVolumeHelper(box);
   scene.add(debugHelper);
+  scene.add(occupiedHelper);
   colliderDebugHelpers.push({ mesh, helper: debugHelper, center: box.getCenter(new THREE.Vector3()) });
+  occupiedVolumeHelpers.push({ mesh, helper: occupiedHelper, center: box.getCenter(new THREE.Vector3()) });
   return {
     mesh,
     box,
@@ -421,6 +453,144 @@ function updateStyleHud() {
 
 updateStyleHud();
 
+const devState = {
+  enabled: devMode,
+  showColliders: devMode,
+  showOccupied: false,
+  selectedColliderIndex: 0,
+  transformStep: 0.1,
+  rotationStep: THREE.MathUtils.degToRad(5),
+  scaleStep: 0.05,
+  layoutDeltas: {},
+  recentContacts: [],
+};
+
+function getLayoutDeltaKey(mesh) {
+  return mesh.userData.entityId || mesh.uuid;
+}
+
+function getLayoutDelta(mesh) {
+  const key = getLayoutDeltaKey(mesh);
+  if (!devState.layoutDeltas[key]) {
+    devState.layoutDeltas[key] = {
+      id: key,
+      tag: mesh.userData.entityTag || "unknown",
+      position: { x: 0, y: 0, z: 0 },
+      rotationY: 0,
+      scale: { x: 1, y: 1, z: 1 },
+    };
+  }
+  return devState.layoutDeltas[key];
+}
+
+function applySavedLayoutDeltas() {
+  if (!devState.enabled) return;
+  try {
+    const raw = window.localStorage.getItem("conceptgame:layout-deltas");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return;
+    collisionVolumes.forEach((collider) => {
+      const key = getLayoutDeltaKey(collider.mesh);
+      const delta = parsed[key];
+      if (!delta) return;
+      collider.mesh.position.set(delta.position?.x ?? collider.mesh.position.x, delta.position?.y ?? collider.mesh.position.y, delta.position?.z ?? collider.mesh.position.z);
+      collider.mesh.rotation.y = delta.rotationY ?? collider.mesh.rotation.y;
+      if (delta.scale) {
+        collider.mesh.scale.set(delta.scale.x ?? collider.mesh.scale.x, delta.scale.y ?? collider.mesh.scale.y, delta.scale.z ?? collider.mesh.scale.z);
+      }
+      devState.layoutDeltas[key] = delta;
+    });
+  } catch (error) {
+    debug.warn("Failed to apply saved layout deltas", { reason: String(error) });
+  }
+}
+
+const devHud = document.createElement("div");
+devHud.style.position = "fixed";
+devHud.style.right = "12px";
+devHud.style.top = "48px";
+devHud.style.maxWidth = "360px";
+devHud.style.maxHeight = "50vh";
+devHud.style.overflow = "auto";
+devHud.style.padding = "8px 10px";
+devHud.style.background = "rgba(2, 6, 23, 0.82)";
+devHud.style.color = "#d1fae5";
+devHud.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, monospace";
+devHud.style.fontSize = "11px";
+devHud.style.lineHeight = "1.35";
+devHud.style.border = "1px solid rgba(16, 185, 129, 0.4)";
+devHud.style.borderRadius = "8px";
+devHud.style.zIndex = "9999";
+devHud.style.display = devState.enabled ? "block" : "none";
+app.appendChild(devHud);
+
+const entityRegistryPanel = document.createElement("div");
+entityRegistryPanel.style.position = "fixed";
+entityRegistryPanel.style.left = "12px";
+entityRegistryPanel.style.bottom = "12px";
+entityRegistryPanel.style.maxWidth = "430px";
+entityRegistryPanel.style.maxHeight = "36vh";
+entityRegistryPanel.style.overflow = "auto";
+entityRegistryPanel.style.padding = "8px 10px";
+entityRegistryPanel.style.background = "rgba(15, 23, 42, 0.84)";
+entityRegistryPanel.style.color = "#f8fafc";
+entityRegistryPanel.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, monospace";
+entityRegistryPanel.style.fontSize = "11px";
+entityRegistryPanel.style.border = "1px solid rgba(148, 163, 184, 0.4)";
+entityRegistryPanel.style.borderRadius = "8px";
+entityRegistryPanel.style.zIndex = "9999";
+entityRegistryPanel.style.display = devState.enabled ? "block" : "none";
+app.appendChild(entityRegistryPanel);
+
+function exportLayoutDeltas() {
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    deltas: devState.layoutDeltas,
+  };
+  const text = JSON.stringify(payload, null, 2);
+  window.localStorage.setItem("conceptgame:layout-deltas", JSON.stringify(devState.layoutDeltas));
+  const blob = new Blob([text], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "layout-deltas.json";
+  link.click();
+  URL.revokeObjectURL(link.href);
+  debug.log("layout:deltas-exported", { entries: Object.keys(devState.layoutDeltas).length });
+}
+
+function updateEntityRegistryPanel() {
+  if (!devState.enabled) return;
+  const rows = entityRegistry.slice(0, 80).map((entity) => {
+    const p = entity.mesh.position;
+    const r = entity.mesh.rotation;
+    return `${entity.id} [${entity.tag}] p(${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}) rY(${r.y.toFixed(2)})`;
+  });
+  entityRegistryPanel.textContent = `Entity Registry (${entityRegistry.length})
+${rows.join("
+")}`;
+}
+
+function updateDevHud() {
+  if (!devState.enabled) return;
+  const selected = collisionVolumes[devState.selectedColliderIndex];
+  const selectedLabel = selected ? `${selected.mesh.userData.entityId} (${selected.mesh.userData.entityTag})` : "none";
+  devHud.textContent =
+    `DEV MODE
+` +
+    `Colliders: ${devState.showColliders ? "on" : "off"} | Occupied: ${devState.showOccupied ? "on" : "off"}
+` +
+    `Selected: ${selectedLabel}
+` +
+    `Controls: B collider, O occupied, N/P select, IJKLU/; move, ,/. rotate, -/= scale, X export
+` +
+    `Recent contacts: ${devState.recentContacts.length}`;
+}
+
+applySavedLayoutDeltas();
+updateDevHud();
+updateEntityRegistryPanel();
+
 function showCombatMessage(message, duration = 1) {
   combatState.message = message;
   combatState.messageTimer = duration;
@@ -464,6 +634,7 @@ function createDummy(position) {
   mesh.position.copy(position);
   mesh.position.y = position.y + 0.8;
   dummyGroup.add(mesh);
+  registerEntity(mesh, "enemy-dummy");
   dummies.push({
     mesh,
     hp: 2,
@@ -481,6 +652,7 @@ function spawnPickup(position) {
   );
   mesh.position.copy(position).add(pickupOffset);
   scene.add(mesh);
+  registerEntity(mesh, "pickup");
   pickups.push({ mesh, spinOffset: Math.random() * Math.PI * 2 });
 }
 
@@ -663,8 +835,19 @@ const updateStaticColliders = () => {
   colliderDebugHelpers.forEach(({ mesh, helper, center }) => {
     tempColliderMatrix.makeTranslation(center.x, center.y, center.z);
     helper.matrix.multiplyMatrices(mesh.matrixWorld, tempColliderMatrix);
-    helper.visible = debug.enabled;
+    helper.visible = debug.enabled || devState.showColliders;
   });
+
+  occupiedVolumeHelpers.forEach(({ mesh, helper, center }) => {
+    tempColliderMatrix.makeTranslation(center.x, center.y, center.z);
+    helper.matrix.multiplyMatrices(mesh.matrixWorld, tempColliderMatrix);
+    helper.visible = devState.showOccupied;
+  });
+
+  if (devState.enabled) {
+    updateDevHud();
+    updateEntityRegistryPanel();
+  }
 };
 
 const clock = new THREE.Clock();
@@ -738,6 +921,7 @@ applyVisualStyle(styleState.mode);
 function animate() {
   const delta = clock.getDelta();
   const elapsed = clock.elapsedTime;
+  applyScriptFrame(delta);
 
   movementForward.set(
     Math.cos(cameraState.yaw),
@@ -768,7 +952,22 @@ function animate() {
 
   integrateBody(playerBody, delta, playerConfig.gravity);
   updateStaticColliders();
-  resolveCollisions(playerBody, playerCollider, staticColliders);
+  const collisionSummary = resolveCollisions(playerBody, playerCollider, staticColliders, {
+    onContact: (contact) => {
+      if (!devState.enabled) return;
+      devState.recentContacts.push({
+        at: elapsed,
+        colliderIndex: contact.colliderIndex,
+        penetration: contact.penetration,
+      });
+      if (devState.recentContacts.length > 20) {
+        devState.recentContacts.shift();
+      }
+    },
+  });
+  if (devState.enabled && collisionSummary.maxPenetration > 0.3) {
+    debug.warn("collision:high-penetration", { maxPenetration: collisionSummary.maxPenetration });
+  }
 
   combatState.fireCooldown = Math.max(0, combatState.fireCooldown - delta);
   if (inputState.fireQueued && combatState.fireCooldown <= 0) {
@@ -866,6 +1065,19 @@ function animate() {
 
 animate();
 
+if (runScriptParam === "smoke" && window.__CONCEPT_AGENT_HARNESS__) {
+  window.__CONCEPT_AGENT_HARNESS__.runScenario({
+    steps: [
+      { duration: 1.2, forward: 1 },
+      { duration: 0.6, strafe: 1 },
+      { duration: 0.1, jump: true },
+      { duration: 0.8, forward: 1, lookYaw: 0.5 },
+      { duration: 0.1, fire: true },
+      { duration: 0.5, forward: -1 }
+    ],
+  });
+}
+
 function handleResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -940,6 +1152,101 @@ renderer.domElement.addEventListener("pointermove", (event) => {
   applyLookDelta(deltaX, deltaY, cameraState.dragSensitivity);
 });
 
+const scriptRunner = {
+  active: false,
+  time: 0,
+  steps: [],
+  stepIndex: 0,
+  traces: [],
+};
+
+function resetInputState() {
+  inputState.forward = 0;
+  inputState.strafe = 0;
+  inputState.jumpQueued = false;
+  inputState.fireQueued = false;
+}
+
+function applyScriptFrame(delta) {
+  if (!scriptRunner.active) {
+    return;
+  }
+
+  scriptRunner.time += delta;
+  const step = scriptRunner.steps[scriptRunner.stepIndex];
+  if (!step) {
+    scriptRunner.active = false;
+    resetInputState();
+    return;
+  }
+
+  const localTime = scriptRunner.time - step.start;
+  if (localTime >= 0 && localTime <= step.duration) {
+    inputState.forward = step.forward ?? 0;
+    inputState.strafe = step.strafe ?? 0;
+    if (step.lookYaw) {
+      cameraState.yaw += step.lookYaw * delta;
+    }
+    if (step.lookPitch) {
+      cameraState.pitch = clampPitch(cameraState.pitch + step.lookPitch * delta, cameraState.mode);
+    }
+    if (step.jump && !step._jumped) {
+      inputState.jumpQueued = true;
+      step._jumped = true;
+    }
+    if (step.fire && !step._fired) {
+      inputState.fireQueued = true;
+      step._fired = true;
+    }
+    scriptRunner.traces.push({
+      t: Number(scriptRunner.time.toFixed(3)),
+      pos: { x: Number(playerBody.position.x.toFixed(3)), y: Number(playerBody.position.y.toFixed(3)), z: Number(playerBody.position.z.toFixed(3)) },
+      vel: { x: Number(playerBody.velocity.x.toFixed(3)), y: Number(playerBody.velocity.y.toFixed(3)), z: Number(playerBody.velocity.z.toFixed(3)) },
+      onGround: playerBody.onGround,
+    });
+  }
+
+  if (localTime > step.duration) {
+    scriptRunner.stepIndex += 1;
+  }
+}
+
+window.__CONCEPT_AGENT_HARNESS__ = {
+  runScenario(scenario = {}) {
+    const steps = Array.isArray(scenario.steps) ? scenario.steps : [];
+    let start = 0;
+    scriptRunner.steps = steps.map((step) => {
+      const mapped = { ...step, duration: Math.max(0.01, Number(step.duration) || 0.01), start };
+      start += mapped.duration;
+      return mapped;
+    });
+    scriptRunner.stepIndex = 0;
+    scriptRunner.time = 0;
+    scriptRunner.active = true;
+    scriptRunner.traces = [];
+    return { accepted: true, steps: scriptRunner.steps.length, duration: start };
+  },
+  getStatus() {
+    return {
+      active: scriptRunner.active,
+      stepIndex: scriptRunner.stepIndex,
+      time: scriptRunner.time,
+      traceCount: scriptRunner.traces.length,
+    };
+  },
+  getTrace() {
+    return scriptRunner.traces.slice();
+  },
+  getEntitySnapshot() {
+    return entityRegistry.map((entity) => ({
+      id: entity.id,
+      tag: entity.tag,
+      position: { x: entity.mesh.position.x, y: entity.mesh.position.y, z: entity.mesh.position.z },
+      rotation: { x: entity.mesh.rotation.x, y: entity.mesh.rotation.y, z: entity.mesh.rotation.z },
+    }));
+  },
+};
+
 debug.attachRenderer(renderer);
 
 window.addEventListener("keydown", (event) => {
@@ -993,6 +1300,59 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.code === "KeyV") {
     applyVisualStyle(styleState.mode === "styled" ? "legacy" : "styled");
+  }
+
+  if (!devState.enabled) {
+    return;
+  }
+
+  if (event.code === "KeyB") {
+    devState.showColliders = !devState.showColliders;
+  }
+  if (event.code === "KeyO") {
+    devState.showOccupied = !devState.showOccupied;
+  }
+  if (event.code === "KeyN") {
+    devState.selectedColliderIndex = (devState.selectedColliderIndex + 1) % collisionVolumes.length;
+  }
+  if (event.code === "KeyP") {
+    devState.selectedColliderIndex = (devState.selectedColliderIndex - 1 + collisionVolumes.length) % collisionVolumes.length;
+  }
+
+  const selected = collisionVolumes[devState.selectedColliderIndex]?.mesh;
+  if (!selected) {
+    return;
+  }
+
+  if (event.code === "KeyI") selected.position.z -= devState.transformStep;
+  if (event.code === "KeyK") selected.position.z += devState.transformStep;
+  if (event.code === "KeyJ") selected.position.x -= devState.transformStep;
+  if (event.code === "KeyL") selected.position.x += devState.transformStep;
+  if (event.code === "KeyU") selected.position.y += devState.transformStep;
+  if (event.code === "Semicolon") selected.position.y -= devState.transformStep;
+  if (event.code === "Comma") selected.rotation.y -= devState.rotationStep;
+  if (event.code === "Period") selected.rotation.y += devState.rotationStep;
+  if (event.code === "Minus") selected.scale.multiplyScalar(1 - devState.scaleStep);
+  if (event.code === "Equal") selected.scale.multiplyScalar(1 + devState.scaleStep);
+
+  if (["KeyI","KeyK","KeyJ","KeyL","KeyU","Semicolon","Comma","Period","Minus","Equal"].includes(event.code)) {
+    const delta = getLayoutDelta(selected);
+    delta.position = {
+      x: Number(selected.position.x.toFixed(3)),
+      y: Number(selected.position.y.toFixed(3)),
+      z: Number(selected.position.z.toFixed(3)),
+    };
+    delta.rotationY = Number(selected.rotation.y.toFixed(3));
+    delta.scale = {
+      x: Number(selected.scale.x.toFixed(3)),
+      y: Number(selected.scale.y.toFixed(3)),
+      z: Number(selected.scale.z.toFixed(3)),
+    };
+    window.localStorage.setItem("conceptgame:layout-deltas", JSON.stringify(devState.layoutDeltas));
+  }
+
+  if (event.code === "KeyX") {
+    exportLayoutDeltas();
   }
 });
 
