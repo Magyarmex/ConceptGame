@@ -19,6 +19,8 @@ so outbound HTTPS access is required.
 - Jump with Space.
 - Fire a basic shot with left click or E.
 - Toggle the combat tutorial overlay with H.
+- Press V to toggle between the legacy look and the styled high-contrast visual pass.
+- Append `?legacyStyle` to load directly into the legacy visual mode for side-by-side review.
 - Move the IK target with the arrow keys, and raise/lower it with R/F.
 
 ## Physics + IK Modules
