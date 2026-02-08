@@ -62,6 +62,20 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
       mainJs.includes("airDrag")
   );
   record(
+    "main.js:map-section-builders",
+    mainJs.includes("function buildSpawnRoom()") &&
+      mainJs.includes("function buildMidLane()") &&
+      mainJs.includes("function buildUpperRoute()") &&
+      mainJs.includes("function buildFlankRoom()")
+  );
+  record(
+    "main.js:map-section-instantiation",
+    mainJs.includes("buildSpawnRoom();") &&
+      mainJs.includes("buildMidLane();") &&
+      mainJs.includes("buildUpperRoute();") &&
+      mainJs.includes("buildFlankRoom();")
+  );
+  record(
     "main.js:collision-registration-min-count",
     mainJs.includes("const MIN_REGISTERED_COLLIDERS = 9") &&
       mainJs.includes("collisionVolumes.length >= MIN_REGISTERED_COLLIDERS")
@@ -107,7 +121,7 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
   );
   record(
     "main.js:dummy-spawn",
-    mainJs.includes("function createDummy(position)") && (mainJs.match(/createDummy\(/g) ?? []).length > 1
+    mainJs.includes("function createDummy(position)") && (mainJs.match(/createDummy\(/g) ?? []).length >= 5
   );
   record(
     "main.js:pickup-loop",

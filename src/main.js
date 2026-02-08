@@ -69,28 +69,93 @@ scene.add(floor);
 
 const environmentGroup = new THREE.Group();
 scene.add(environmentGroup);
-
-const baseGeometry = new THREE.IcosahedronGeometry(1, 0);
-const baseMaterial = new THREE.MeshStandardMaterial({
-  color: 0x38bdf8,
-  metalness: 0.2,
-  roughness: 0.4,
-});
-const baseMesh = new THREE.Mesh(baseGeometry, baseMaterial);
-baseMesh.position.y = 1.2;
-baseMesh.position.x = -3.5;
-environmentGroup.add(baseMesh);
-
-const columnGeometry = new THREE.BoxGeometry(0.6, 1.8, 0.6);
-const columnMaterial = new THREE.MeshStandardMaterial({ color: 0x334155 });
-const columnOffsets = [
-  [-2, 0.9, -2],
-  [2, 0.9, -1.5],
-  [-1.5, 0.9, 2.2],
-];
 const collisionMeshes = [];
 const MIN_REGISTERED_COLLIDERS = 9;
 const colliderDebugHelpers = [];
+
+const mapMaterials = {
+  spawn: new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85 }),
+  mid: new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.82 }),
+  upper: new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.78 }),
+  flank: new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.85 }),
+  cover: new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.74 }),
+};
+
+function createMapSection(name) {
+  const section = new THREE.Group();
+  section.name = name;
+  environmentGroup.add(section);
+  return section;
+}
+
+function addMapBlock(section, { size, position, rotation, material, collidable = true }) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), material);
+  mesh.position.set(position[0], position[1], position[2]);
+  if (rotation) {
+    mesh.rotation.set(rotation[0], rotation[1], rotation[2]);
+  }
+  section.add(mesh);
+  if (collidable) {
+    registerCollisionMesh(mesh);
+  }
+  return mesh;
+}
+
+function buildSpawnRoom() {
+  const section = createMapSection("spawn-room");
+  addMapBlock(section, { size: [6, 0.5, 6], position: [-6.5, 0.25, 0], material: mapMaterials.spawn });
+  addMapBlock(section, { size: [6, 2.8, 0.4], position: [-6.5, 1.4, -3], material: mapMaterials.spawn });
+  addMapBlock(section, { size: [6, 2.8, 0.4], position: [-6.5, 1.4, 3], material: mapMaterials.spawn });
+  addMapBlock(section, { size: [0.4, 2.8, 2.1], position: [-9.5, 1.4, -1.95], material: mapMaterials.spawn });
+  addMapBlock(section, { size: [0.4, 2.8, 2.1], position: [-9.5, 1.4, 1.95], material: mapMaterials.spawn });
+  addMapBlock(section, { size: [1.4, 1.2, 1.4], position: [-5.8, 0.6, 0.1], material: mapMaterials.cover });
+}
+
+function buildMidLane() {
+  const section = createMapSection("mid-lane");
+  addMapBlock(section, { size: [8.5, 0.5, 6.5], position: [-0.7, 0.25, 0], material: mapMaterials.mid });
+  addMapBlock(section, { size: [0.4, 2.6, 6.5], position: [3.35, 1.3, 0], material: mapMaterials.mid });
+  addMapBlock(section, { size: [1.3, 1.3, 1.3], position: [-1.8, 0.65, -1.6], material: mapMaterials.cover });
+  addMapBlock(section, { size: [1.8, 1.8, 0.6], position: [0.2, 0.9, 1.2], material: mapMaterials.cover });
+  addMapBlock(section, { size: [0.8, 1.5, 2], position: [1.5, 0.75, -1.6], material: mapMaterials.cover });
+}
+
+function buildUpperRoute() {
+  const section = createMapSection("upper-route");
+  addMapBlock(section, {
+    size: [4, 0.45, 2.4],
+    position: [1.6, 1.12, -3.9],
+    rotation: [0, 0, -Math.PI / 8],
+    material: mapMaterials.upper,
+  });
+  addMapBlock(section, { size: [4.4, 0.5, 3.4], position: [3.8, 2.25, -5.8], material: mapMaterials.upper });
+  addMapBlock(section, { size: [1.2, 1.2, 1.2], position: [4.7, 2.85, -6], material: mapMaterials.cover });
+  addMapBlock(section, { size: [0.35, 1.8, 3.4], position: [1.65, 3.15, -5.8], material: mapMaterials.upper });
+
+  const stairDepth = 0.9;
+  [0.45, 0.9, 1.35, 1.8].forEach((height, index) => {
+    addMapBlock(section, {
+      size: [1.3, 0.3, stairDepth],
+      position: [-2.8 + index * 0.45, height, 3.1 - index * 0.55],
+      material: mapMaterials.upper,
+    });
+  });
+}
+
+function buildFlankRoom() {
+  const section = createMapSection("flank-room");
+  addMapBlock(section, { size: [6.4, 0.5, 6], position: [6.3, 0.25, 0], material: mapMaterials.flank });
+  addMapBlock(section, { size: [0.4, 2.6, 6], position: [9.5, 1.3, 0], material: mapMaterials.flank });
+  addMapBlock(section, { size: [3.8, 0.5, 2], position: [7.3, 1.45, 2], material: mapMaterials.flank });
+  addMapBlock(section, { size: [0.4, 1.6, 2], position: [5.4, 2.25, 2], material: mapMaterials.flank });
+  addMapBlock(section, { size: [1.4, 1.2, 1.4], position: [6.1, 0.6, -1.4], material: mapMaterials.cover });
+  addMapBlock(section, { size: [1.4, 1.2, 1.4], position: [7.9, 0.6, 0.7], material: mapMaterials.cover });
+}
+
+buildSpawnRoom();
+buildMidLane();
+buildUpperRoute();
+buildFlankRoom();
 
 function createColliderDebugHelper(localBox) {
   const size = localBox.getSize(new THREE.Vector3());
@@ -109,56 +174,11 @@ function registerCollisionMesh(mesh) {
   collisionMeshes.push(mesh);
 }
 
-columnOffsets.forEach(([x, y, z]) => {
-  const column = new THREE.Mesh(columnGeometry, columnMaterial);
-  column.position.set(x, y, z);
-  environmentGroup.add(column);
-  registerCollisionMesh(column);
-});
-
-const platformMaterial = new THREE.MeshStandardMaterial({
-  color: 0x1f2937,
-  roughness: 0.8,
-});
-const platformGeometry = new THREE.BoxGeometry(3.5, 0.4, 3.5);
-const platforms = [
-  { position: new THREE.Vector3(4, 0.2, 3) },
-  { position: new THREE.Vector3(-4, 0.2, -3.5) },
-];
-platforms.forEach(({ position }) => {
-  const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-  platform.position.copy(position);
-  environmentGroup.add(platform);
-  registerCollisionMesh(platform);
-});
-
-const ramp = new THREE.Mesh(
-  new THREE.BoxGeometry(4, 0.4, 2.4),
-  new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.7 })
-);
-ramp.position.set(2.5, 0.2, -4.5);
-ramp.rotation.z = -Math.PI / 12;
-environmentGroup.add(ramp);
-registerCollisionMesh(ramp);
-
-const obstacleGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
-[
-  new THREE.Vector3(0, 0.6, -4),
-  new THREE.Vector3(1.8, 0.6, 1.2),
-  new THREE.Vector3(-2.2, 0.6, 1.4),
-].forEach((position) => {
-  const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
-  obstacle.position.copy(position);
-  environmentGroup.add(obstacle);
-  registerCollisionMesh(obstacle);
-});
-
 const player = new THREE.Mesh(
   new THREE.CapsuleGeometry(0.45, 1.1, 6, 12),
   new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.4 })
 );
-player.position.set(0, 1.2, 0);
+player.position.set(-7.5, 1.2, 0);
 scene.add(player);
 
 const playerConfig = {
@@ -174,7 +194,7 @@ const playerConfig = {
 };
 
 const playerBody = createRigidBody({
-  position: new THREE.Vector3(0, playerConfig.height / 2, 0),
+  position: new THREE.Vector3(-7.5, playerConfig.height / 2, 0),
   velocity: new THREE.Vector3(),
   gravityScale: 1,
 });
@@ -340,7 +360,7 @@ function createDummy(position) {
     new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0x000000 })
   );
   mesh.position.copy(position);
-  mesh.position.y = 0.8;
+  mesh.position.y = position.y + 0.8;
   dummyGroup.add(mesh);
   dummies.push({
     mesh,
@@ -408,9 +428,11 @@ function firePlayerShot() {
   updateCombatHud();
 }
 
-createDummy(new THREE.Vector3(2.5, 0, 0.6));
-createDummy(new THREE.Vector3(3.7, 0, -1.5));
-createDummy(new THREE.Vector3(1.8, 0, -2.2));
+createDummy(new THREE.Vector3(-5.8, 0, 0.2));
+createDummy(new THREE.Vector3(0.8, 0, -1.7));
+createDummy(new THREE.Vector3(7.5, 0, -0.8));
+createDummy(new THREE.Vector3(4.3, 2.05, -5.9));
+createDummy(new THREE.Vector3(7.3, 1.25, 2));
 
 const ikGroup = new THREE.Group();
 scene.add(ikGroup);
@@ -550,8 +572,6 @@ let statsElapsed = 0;
 function animate() {
   const delta = clock.getDelta();
   const elapsed = clock.elapsedTime;
-  baseMesh.rotation.y = elapsed * 0.6;
-  baseMesh.rotation.x = elapsed * 0.3;
 
   movementForward.set(
     Math.cos(cameraState.yaw),
