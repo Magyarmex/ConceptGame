@@ -47,4 +47,4 @@ so outbound HTTPS access is required.
 
 ## GitHub Pages
 - The site is fully static; GitHub Pages should serve `index.html` at the repo root.
-- If you see stale assets, bump the cache-busting query strings in `index.html`.
+- If you see stale assets, bump the cache-busting query strings in `index.html` (currently `?v=2` for both CSS and JS).

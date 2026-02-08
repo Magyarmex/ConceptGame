@@ -517,6 +517,48 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
         "Spawn pickups on dummy defeat and increment resources on proximity collect.",
     });
     record(results, {
+      status:
+        !mainJs.includes("baseMaterial") &&
+        !mainJs.includes("columnMaterial") &&
+        !mainJs.includes("platformMaterial") &&
+        !mainJs.includes("obstacleMaterial") &&
+        !mainJs.includes("ramp.material")
+          ? "pass"
+          : "fail",
+      name: "main.js:visual-style-no-orphan-material-references",
+      details:
+        !mainJs.includes("baseMaterial") &&
+        !mainJs.includes("columnMaterial") &&
+        !mainJs.includes("platformMaterial") &&
+        !mainJs.includes("obstacleMaterial") &&
+        !mainJs.includes("ramp.material")
+          ? ""
+          : "Found stale material references in applyVisualStyle",
+      nextStep:
+        "Use mapMaterials and existing scene materials in applyVisualStyle; remove undefined material references.",
+    });
+    record(results, {
+      status:
+        mainJs.includes("mapMaterials.spawn") &&
+        mainJs.includes("mapMaterials.mid") &&
+        mainJs.includes("mapMaterials.upper") &&
+        mainJs.includes("mapMaterials.flank") &&
+        mainJs.includes("mapMaterials.cover")
+          ? "pass"
+          : "fail",
+      name: "main.js:visual-style-map-materials-wired",
+      details:
+        mainJs.includes("mapMaterials.spawn") &&
+        mainJs.includes("mapMaterials.mid") &&
+        mainJs.includes("mapMaterials.upper") &&
+        mainJs.includes("mapMaterials.flank") &&
+        mainJs.includes("mapMaterials.cover")
+          ? ""
+          : "Visual style pass is not wired to map material slots.",
+      nextStep:
+        "Wire applyVisualStyle material assignments to mapMaterials slots.",
+    });
+    record(results, {
       status: mainJs.includes("Resources: ${combatState.resourceCount}") ? "pass" : "fail",
       name: "main.js:resource-counter-visible",
       details: mainJs.includes("Resources: ${combatState.resourceCount}")
