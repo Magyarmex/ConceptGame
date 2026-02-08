@@ -257,7 +257,7 @@ function createDebugPanel() {
     logContainer.scrollTop = logContainer.scrollHeight;
   }
 
-  function setMetrics({ fps, frameTimeMs, drawCalls, triangles }) {
+  function setMetrics({ fps, frameTimeMs, drawCalls, triangles, grounded, moveSpeed }) {
     const lines = [
       `FPS: ${fps.toFixed(1)}`,
       `Frame: ${frameTimeMs.toFixed(2)} ms`,
@@ -269,6 +269,14 @@ function createDebugPanel() {
 
     if (typeof triangles === "number") {
       lines.push(`Triangles: ${triangles}`);
+    }
+
+    if (typeof grounded === "boolean") {
+      lines.push(`Grounded: ${grounded ? "yes" : "no"}`);
+    }
+
+    if (typeof moveSpeed === "number") {
+      lines.push(`Move Speed: ${moveSpeed.toFixed(2)}`);
     }
 
     metrics.textContent = lines.join("\n");

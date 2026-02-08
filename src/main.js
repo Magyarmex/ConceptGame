@@ -621,11 +621,14 @@ function animate() {
   if (statsElapsed >= 0.5) {
     const fps = frameCount / statsElapsed;
     const frameTimeMs = (statsElapsed / frameCount) * 1000;
+    const planarSpeed = Math.hypot(playerBody.velocity.x, playerBody.velocity.z);
     debug.updateStats({
       fps,
       frameTimeMs,
       drawCalls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
+      grounded: playerBody.onGround,
+      moveSpeed: planarSpeed,
     });
     frameCount = 0;
     statsElapsed = 0;
