@@ -294,15 +294,62 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
         "Register static blockers via registerCollisionMesh during world setup.",
     });
     record(results, {
-      status: mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => ({")
+      status: mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => {")
         ? "pass"
         : "fail",
       name: "main.js:collision-volumes-from-registered-meshes",
-      details: mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => ({")
+      details: mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => {")
         ? ""
         : "collisionVolumes is not built from registered collisionMeshes",
       nextStep:
         "Build collisionVolumes from collisionMeshes so registered static geometry blocks movement.",
+    });
+    record(results, {
+      status:
+        mainJs.includes("applyPlanarInertia") &&
+        mainJs.includes("groundAcceleration") &&
+        mainJs.includes("airDrag")
+          ? "pass"
+          : "fail",
+      name: "main.js:inertia-helper-used",
+      details:
+        mainJs.includes("applyPlanarInertia") &&
+        mainJs.includes("groundAcceleration") &&
+        mainJs.includes("airDrag")
+          ? ""
+          : "Inertia helper wiring missing from movement loop",
+      nextStep:
+        "Apply planar inertia with ground/air acceleration and drag tuning during player movement.",
+    });
+    record(results, {
+      status:
+        mainJs.includes("const MIN_REGISTERED_COLLIDERS = 9") &&
+        mainJs.includes("collisionVolumes.length >= MIN_REGISTERED_COLLIDERS")
+          ? "pass"
+          : "fail",
+      name: "main.js:collision-registration-min-count",
+      details:
+        mainJs.includes("const MIN_REGISTERED_COLLIDERS = 9") &&
+        mainJs.includes("collisionVolumes.length >= MIN_REGISTERED_COLLIDERS")
+          ? ""
+          : "Missing minimum collider-count guardrails.",
+      nextStep:
+        "Define MIN_REGISTERED_COLLIDERS and validate collisionVolumes.length against it.",
+    });
+    record(results, {
+      status:
+        mainJs.includes("physics:player-collider-dimensions") &&
+        mainJs.includes("physics:static-collider-count")
+          ? "pass"
+          : "fail",
+      name: "main.js:debug-collider-checks",
+      details:
+        mainJs.includes("physics:player-collider-dimensions") &&
+        mainJs.includes("physics:static-collider-count")
+          ? ""
+          : "Missing debug checks for collider dimensions/count",
+      nextStep:
+        "Emit debug.check assertions for player collider dimensions and static collider count.",
     });
     record(results, {
       status: mainJs.includes("applyLookDelta(deltaX, deltaY, cameraState.dragSensitivity)")
