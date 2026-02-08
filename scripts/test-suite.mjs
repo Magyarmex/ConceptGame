@@ -323,6 +323,44 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
     });
     record(results, {
       status:
+        mainJs.includes("function buildSpawnRoom()") &&
+        mainJs.includes("function buildMidLane()") &&
+        mainJs.includes("function buildUpperRoute()") &&
+        mainJs.includes("function buildFlankRoom()")
+          ? "pass"
+          : "fail",
+      name: "main.js:map-section-builders",
+      details:
+        mainJs.includes("function buildSpawnRoom()") &&
+        mainJs.includes("function buildMidLane()") &&
+        mainJs.includes("function buildUpperRoute()") &&
+        mainJs.includes("function buildFlankRoom()")
+          ? ""
+          : "Expected map builder functions are missing",
+      nextStep:
+        "Define buildSpawnRoom/buildMidLane/buildUpperRoute/buildFlankRoom in src/main.js.",
+    });
+    record(results, {
+      status:
+        mainJs.includes("buildSpawnRoom();") &&
+        mainJs.includes("buildMidLane();") &&
+        mainJs.includes("buildUpperRoute();") &&
+        mainJs.includes("buildFlankRoom();")
+          ? "pass"
+          : "fail",
+      name: "main.js:map-section-instantiation",
+      details:
+        mainJs.includes("buildSpawnRoom();") &&
+        mainJs.includes("buildMidLane();") &&
+        mainJs.includes("buildUpperRoute();") &&
+        mainJs.includes("buildFlankRoom();")
+          ? ""
+          : "Expected map section builder invocation missing",
+      nextStep:
+        "Invoke each map builder so all zones are constructed.",
+    });
+    record(results, {
+      status:
         mainJs.includes("const MIN_REGISTERED_COLLIDERS = 9") &&
         mainJs.includes("collisionVolumes.length >= MIN_REGISTERED_COLLIDERS")
           ? "pass"
@@ -451,13 +489,13 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
     record(results, {
       status:
         mainJs.includes("function createDummy(position)") &&
-        (mainJs.match(/createDummy\(/g) ?? []).length > 1
+        (mainJs.match(/createDummy\(/g) ?? []).length >= 5
           ? "pass"
           : "fail",
       name: "main.js:dummy-spawn",
       details:
         mainJs.includes("function createDummy(position)") &&
-        (mainJs.match(/createDummy\(/g) ?? []).length > 1
+        (mainJs.match(/createDummy\(/g) ?? []).length >= 5
           ? ""
           : "Target dummy creation/spawn wiring missing",
       nextStep:

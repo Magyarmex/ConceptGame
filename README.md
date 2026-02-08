@@ -38,6 +38,13 @@ so outbound HTTPS access is required.
 - Run `node scripts/report.mjs` for a human-readable summary with next steps.
 - Run `node scripts/diagnostics.mjs` to check core file wiring and debug hooks.
 
+
+## Map Layout (Shooter Prototype)
+- The map is now a compact multi-zone layout with a spawn room, mid lane, upper route, and flank room.
+- Vertical traversal includes an upper ramp route and a stair-step connector for looped movement.
+- Targets are distributed across near/mid/far lanes, with elevated and flank pressure positions for engagement choice testing.
+- Use `?debug` to confirm collider occupancy aligns with rendered map geometry.
+
 ## GitHub Pages
 - The site is fully static; GitHub Pages should serve `index.html` at the repo root.
 - If you see stale assets, bump the cache-busting query strings in `index.html`.
