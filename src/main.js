@@ -97,6 +97,7 @@ columnOffsets.forEach(([x, y, z]) => {
   const column = new THREE.Mesh(columnGeometry, columnMaterial);
   column.position.set(x, y, z);
   environmentGroup.add(column);
+  registerCollisionMesh(column);
 });
 
 const platformMaterial = new THREE.MeshStandardMaterial({
@@ -112,6 +113,7 @@ platforms.forEach(({ position }) => {
   const platform = new THREE.Mesh(platformGeometry, platformMaterial);
   platform.position.copy(position);
   environmentGroup.add(platform);
+  registerCollisionMesh(platform);
 });
 
 const ramp = new THREE.Mesh(
@@ -121,6 +123,7 @@ const ramp = new THREE.Mesh(
 ramp.position.set(2.5, 0.2, -4.5);
 ramp.rotation.z = -Math.PI / 12;
 environmentGroup.add(ramp);
+registerCollisionMesh(ramp);
 
 const obstacleGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.2);
 const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
@@ -132,6 +135,7 @@ const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a });
   const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
   obstacle.position.copy(position);
   environmentGroup.add(obstacle);
+  registerCollisionMesh(obstacle);
 });
 
 const player = new THREE.Mesh(
@@ -147,6 +151,7 @@ const playerConfig = {
   gravity: 18,
   damping: 10,
   height: 1.6,
+  radius: 0.45,
 };
 
 const playerBody = createRigidBody({

@@ -37,6 +37,23 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
   const mainJs = readFile("src/main.js");
   record("main.js:debug-import", mainJs.includes("createDebugBus"));
   record("main.js:app-mount", mainJs.includes('querySelector("#app")'));
+  record(
+    "main.js:player-radius-config",
+    /radius:\s*\d*\.?\d+/.test(mainJs) &&
+      mainJs.includes("radius: playerConfig.radius")
+  );
+  record(
+    "main.js:player-halfheight-uses-radius",
+    mainJs.includes("halfHeight: (playerConfig.height - playerConfig.radius * 2) / 2")
+  );
+  record(
+    "main.js:collision-registration-nonempty",
+    (mainJs.match(/registerCollisionMesh\(/g) ?? []).length > 1
+  );
+  record(
+    "main.js:collision-volumes-from-registered-meshes",
+    mainJs.includes("const collisionVolumes = collisionMeshes.map((mesh) => ({")
+  );
 }
 
 if (fs.existsSync(path.join(root, "src/debug.js"))) {
