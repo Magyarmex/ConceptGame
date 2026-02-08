@@ -304,6 +304,58 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
       nextStep:
         "Build collisionVolumes from collisionMeshes so registered static geometry blocks movement.",
     });
+    record(results, {
+      status: mainJs.includes("applyLookDelta(deltaX, deltaY, cameraState.dragSensitivity)")
+        ? "pass"
+        : "fail",
+      name: "main.js:look-delta-unified",
+      details: mainJs.includes("applyLookDelta(deltaX, deltaY, cameraState.dragSensitivity)")
+        ? ""
+        : "Drag path does not use shared applyLookDelta",
+      nextStep:
+        "Route drag pointer deltas through applyLookDelta to keep sign/clamp behavior aligned.",
+    });
+    record(results, {
+      status:
+        mainJs.includes("cameraState.yaw += deltaX * sensitivity") &&
+        mainJs.includes("cameraState.pitch -= deltaY * sensitivity")
+          ? "pass"
+          : "fail",
+      name: "main.js:look-sign-convention",
+      details:
+        mainJs.includes("cameraState.yaw += deltaX * sensitivity") &&
+        mainJs.includes("cameraState.pitch -= deltaY * sensitivity")
+          ? ""
+          : "Look sign convention is not explicit/consistent in applyLookDelta",
+      nextStep:
+        "Use yaw += deltaX and pitch -= deltaY in applyLookDelta for consistent pan mapping.",
+    });
+    record(results, {
+      status:
+        mainJs.includes("minPitch: -Math.PI / 2 + 0.01") &&
+        mainJs.includes("maxPitch: Math.PI / 2 - 0.01")
+          ? "pass"
+          : "fail",
+      name: "main.js:first-person-free-look-bounds",
+      details:
+        mainJs.includes("minPitch: -Math.PI / 2 + 0.01") &&
+        mainJs.includes("maxPitch: Math.PI / 2 - 0.01")
+          ? ""
+          : "First-person pitch bounds are not near-vertical free-look",
+      nextStep:
+        "Set first-person pitch bounds close to +/- PI/2 with a small epsilon.",
+    });
+    record(results, {
+      status: mainJs.includes('const lookTarget = cameraState.mode === "first" ? cameraLookTarget : cameraFocus;')
+        ? "pass"
+        : "fail",
+      name: "main.js:first-person-look-target",
+      details: mainJs.includes('const lookTarget = cameraState.mode === "first" ? cameraLookTarget : cameraFocus;')
+        ? ""
+        : "Camera lookAt target does not use forward-derived first-person target",
+      nextStep:
+        "Use first-person forward look target when camera mode is first.",
+    });
   }
 
   await runImportChecks(results);

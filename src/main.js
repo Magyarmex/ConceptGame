@@ -42,8 +42,8 @@ const cameraState = {
     maxPitch: 1.1,
   },
   firstPerson: {
-    minPitch: -1.2,
-    maxPitch: 1.2,
+    minPitch: -Math.PI / 2 + 0.01,
+    maxPitch: Math.PI / 2 - 0.01,
   },
   sensitivity: 0.0025,
   dragSensitivity: 0.005,
@@ -294,8 +294,10 @@ function updateCameraPosition(delta) {
     cameraLookTarget.copy(cameraFocus);
   }
 
+  const lookTarget = cameraState.mode === "first" ? cameraLookTarget : cameraFocus;
+
   camera.position.lerp(cameraDesired, 1 - Math.exp(-delta * 8));
-  cameraLook.lerp(cameraFocus, 1 - Math.exp(-delta * 10));
+  cameraLook.lerp(lookTarget, 1 - Math.exp(-delta * 10));
   camera.lookAt(cameraLook);
 }
 
@@ -417,7 +419,7 @@ const pointerState = {
 };
 
 function applyLookDelta(deltaX, deltaY, sensitivity) {
-  cameraState.yaw -= deltaX * sensitivity;
+  cameraState.yaw += deltaX * sensitivity;
   cameraState.pitch -= deltaY * sensitivity;
   cameraState.pitch = clampPitch(cameraState.pitch, cameraState.mode);
 }
@@ -472,9 +474,7 @@ renderer.domElement.addEventListener("pointermove", (event) => {
   const deltaY = event.clientY - pointerState.lastPointer.y;
   pointerState.lastPointer = { x: event.clientX, y: event.clientY };
 
-  cameraState.yaw -= deltaX * cameraState.dragSensitivity;
-  cameraState.pitch += deltaY * cameraState.dragSensitivity;
-  cameraState.pitch = Math.max(-1.2, Math.min(1.2, cameraState.pitch));
+  applyLookDelta(deltaX, deltaY, cameraState.dragSensitivity);
 });
 
 debug.attachRenderer(renderer);
