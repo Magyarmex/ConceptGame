@@ -23,6 +23,7 @@ checkFileExists("index.html");
 checkFileExists("src/main.js");
 checkFileExists("src/debug.js");
 checkFileExists("docs/Debugging.md");
+checkFileExists("scripts/agent-dev-workflow.mjs");
 
 if (fs.existsSync(path.join(root, "index.html"))) {
   const indexHtml = readFile("index.html");
@@ -116,6 +117,18 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
   );
 
   record(
+    "main.js:dev-mode-hooks",
+    mainJs.includes('const devMode = urlParams.has("dev")') &&
+      mainJs.includes("entityRegistry") &&
+      mainJs.includes("exportLayoutDeltas")
+  );
+  record(
+    "main.js:agent-harness-api",
+    mainJs.includes("window.__CONCEPT_AGENT_HARNESS__") &&
+      mainJs.includes("runScenario(scenario")
+  );
+
+  record(
     "main.js:attack-input-queued",
     mainJs.includes("fireQueued") && mainJs.includes('event.code === "KeyE"')
   );
@@ -172,6 +185,15 @@ if (fs.existsSync(path.join(root, "src/debug.js"))) {
   record("debug.js:error-handlers", debugJs.includes("unhandledrejection"));
 }
 
+
+if (fs.existsSync(path.join(root, "scripts/agent-dev-workflow.mjs"))) {
+  const workflow = readFile("scripts/agent-dev-workflow.mjs");
+  record(
+    "agent-workflow:harness-runner",
+    workflow.includes("__CONCEPT_AGENT_HARNESS__") && workflow.includes("runScenarioInPage")
+  );
+}
+
 const failed = results.filter((entry) => !entry.passed);
 
 console.log("Diagnostics summary:");
@@ -187,3 +209,4 @@ if (failed.length > 0) {
 } else {
   console.log("Diagnostics passed.");
 }
+
