@@ -94,6 +94,19 @@ if (fs.existsSync(path.join(root, "src/main.js"))) {
     "main.js:resource-counter-visible",
     mainJs.includes("Resources: ${combatState.resourceCount}")
   );
+
+  record(
+    "main.js:tutorial-ui-present",
+    mainJs.includes("\"Tutorial\\n\"") && mainJs.includes('event.code === "KeyH"')
+  );
+  record(
+    "main.js:crosshair-ui-present",
+    mainJs.includes("crosshairHud") && mainJs.includes('crosshairHud.textContent = "+"')
+  );
+  record(
+    "main.js:shot-feedback-message",
+    mainJs.includes('showCombatMessage("Miss"') && mainJs.includes('showCombatMessage(dummy.hp <= 0 ? "Target down! Pickup dropped." : "Hit!"')
+  );
 }
 
 if (fs.existsSync(path.join(root, "src/debug.js"))) {

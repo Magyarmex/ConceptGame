@@ -424,6 +424,48 @@ export async function runTestSuite({ includeRuntime = true, silent = false } = {
       nextStep:
         "Render a visible resource counter overlay tied to combatState.resourceCount.",
     });
+
+    record(results, {
+      status:
+        mainJs.includes("\"Tutorial\\n\"") && mainJs.includes('event.code === "KeyH"')
+          ? "pass"
+          : "fail",
+      name: "main.js:tutorial-ui-present",
+      details:
+        mainJs.includes("\"Tutorial\\n\"") && mainJs.includes('event.code === "KeyH"')
+          ? ""
+          : "Tutorial overlay text or H toggle wiring missing",
+      nextStep:
+        "Add a visible tutorial overlay and allow toggling it with KeyH.",
+    });
+    record(results, {
+      status:
+        mainJs.includes("crosshairHud") && mainJs.includes('crosshairHud.textContent = "+"')
+          ? "pass"
+          : "fail",
+      name: "main.js:crosshair-ui-present",
+      details:
+        mainJs.includes("crosshairHud") && mainJs.includes('crosshairHud.textContent = "+"')
+          ? ""
+          : "Center crosshair UI wiring missing",
+      nextStep:
+        "Add a center crosshair HUD element for aiming readability.",
+    });
+    record(results, {
+      status:
+        mainJs.includes('showCombatMessage("Miss"') &&
+        mainJs.includes('showCombatMessage(dummy.hp <= 0 ? "Target down! Pickup dropped." : "Hit!"')
+          ? "pass"
+          : "fail",
+      name: "main.js:shot-feedback-message",
+      details:
+        mainJs.includes('showCombatMessage("Miss"') &&
+        mainJs.includes('showCombatMessage(dummy.hp <= 0 ? "Target down! Pickup dropped." : "Hit!"')
+          ? ""
+          : "Shot feedback messages for miss/hit/defeat are missing",
+      nextStep:
+        "Show immediate on-screen text feedback for miss/hit/defeat events.",
+    });
   }
 
   await runImportChecks(results);
