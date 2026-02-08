@@ -30,6 +30,8 @@ so outbound HTTPS access is required.
 - Append `?debug` to the URL to enable the on-screen debug console.
 - Errors and unhandled promise rejections will be captured in the debug console when enabled.
 - Live stats (FPS/frame time/draw calls/triangles) appear in the debug console.
+- Run `node scripts/test-suite.mjs` for the automated diagnostics suite (file integrity, imports, runtime checks).
+- Run `node scripts/report.mjs` for a human-readable summary with next steps.
 - Run `node scripts/diagnostics.mjs` to check core file wiring and debug hooks.
 
 ## GitHub Pages

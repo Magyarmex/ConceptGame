@@ -2,9 +2,22 @@ const DEBUG_QUERY_KEY = "debug";
 const DEBUG_STORAGE_KEY = "conceptgame:debug";
 const LOG_LIMIT = 200;
 const CHECK_LIMIT = 50;
+const ERROR_CODES = {
+  UNHANDLED_ERROR: "CG-E001",
+  UNHANDLED_REJECTION: "CG-E002",
+  CHECK_FAILURE: "CG-E003",
+  LOGGED_ERROR: "CG-E004",
+};
+const DEFAULT_SEVERITY = {
+  info: "low",
+  warn: "medium",
+  error: "high",
+};
 
 const logBuffer = [];
 const checkBuffer = [];
+const errorDedup = new Map();
+let lastError = null;
 
 function pushBuffer(buffer, entry, limit) {
   buffer.push(entry);
@@ -21,17 +34,77 @@ function isDebugEnabled() {
   return queryEnabled || storedEnabled;
 }
 
+function formatReport(record) {
+  if (!record) {
+    return "No errors recorded.";
+  }
+
+  const metaText =
+    record.meta && Object.keys(record.meta).length
+      ? ` meta=${JSON.stringify(record.meta)}`
+      : "";
+  return `[${record.code}] ${record.severity.toUpperCase()} ${record.message} (x${
+    record.occurrences
+  } @ ${record.timestamp})${metaText}`;
+}
+
 export function createDebugBus() {
   const enabled = isDebugEnabled();
   const panel = enabled ? createDebugPanel() : null;
 
   function emit(level, message, meta = {}) {
+    const { code: metaCode, severity: metaSeverity, dedupeKey, ...metaRest } =
+      meta ?? {};
+    const severity =
+      metaSeverity ?? DEFAULT_SEVERITY[level] ?? DEFAULT_SEVERITY.info;
+    const code =
+      metaCode ??
+      (level === "error" ? ERROR_CODES.LOGGED_ERROR : undefined);
     const payload = {
+      code,
       level,
+      severity,
       message,
-      meta,
+      meta: metaRest,
+      occurrences: 1,
       timestamp: new Date().toISOString(),
     };
+
+    if (level === "error") {
+      const key = dedupeKey ?? `${code}:${message}`;
+      const existing = errorDedup.get(key);
+      if (existing) {
+        existing.occurrences += 1;
+        existing.timestamp = payload.timestamp;
+        if (metaRest && Object.keys(metaRest).length) {
+          existing.meta = { ...existing.meta, ...metaRest };
+        }
+        lastError = {
+          code: existing.code,
+          severity: existing.severity,
+          message: existing.message,
+          meta: existing.meta,
+          timestamp: existing.timestamp,
+          occurrences: existing.occurrences,
+        };
+        if (enabled && panel) {
+          panel.append({
+            ...existing,
+            message: `${existing.message} (x${existing.occurrences})`,
+          });
+        }
+        return;
+      }
+      errorDedup.set(key, payload);
+      lastError = {
+        code: payload.code,
+        severity: payload.severity,
+        message: payload.message,
+        meta: payload.meta,
+        timestamp: payload.timestamp,
+        occurrences: payload.occurrences,
+      };
+    }
 
     pushBuffer(logBuffer, payload, LOG_LIMIT);
 
@@ -64,12 +137,19 @@ export function createDebugBus() {
       });
     }
     if (!passed) {
-      console.warn("[Debug]", `Check failed: ${name}`, meta);
+      emit("error", `Check failed: ${name}`, {
+        code: ERROR_CODES.CHECK_FAILURE,
+        severity: "medium",
+        check: name,
+        ...meta,
+      });
     }
   }
 
   window.addEventListener("error", (event) => {
     emit("error", event.message || "Unhandled error", {
+      code: ERROR_CODES.UNHANDLED_ERROR,
+      severity: "high",
       filename: event.filename,
       lineno: event.lineno,
       colno: event.colno,
@@ -79,6 +159,8 @@ export function createDebugBus() {
 
   window.addEventListener("unhandledrejection", (event) => {
     emit("error", "Unhandled promise rejection", {
+      code: ERROR_CODES.UNHANDLED_REJECTION,
+      severity: "high",
       reason: event.reason?.toString?.() ?? event.reason,
     });
   });
@@ -91,6 +173,8 @@ export function createDebugBus() {
     check: (name, passed, meta) => emitCheck(name, passed, meta),
     getLogs: () => [...logBuffer],
     getChecks: () => [...checkBuffer],
+    getLastError: () => (lastError ? { ...lastError } : null),
+    report: (record) => formatReport(record ?? lastError),
     getStatus: () => ({
       enabled,
       logCount: logBuffer.length,
@@ -123,6 +207,8 @@ export function createDebugBus() {
   window.__CONCEPT_DEBUG__ = {
     getLogs: api.getLogs,
     getChecks: api.getChecks,
+    getLastError: api.getLastError,
+    report: api.report,
     getStatus: api.getStatus,
   };
 
@@ -191,8 +277,12 @@ function createDebugPanel() {
   return { append, setMetrics };
 }
 
-function formatPayload({ level, message, meta, timestamp }) {
+function formatPayload({ level, message, meta, timestamp, code, severity, occurrences }) {
   const metaText =
     meta && Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : "";
-  return `[${timestamp}] ${level.toUpperCase()}: ${message}${metaText}`;
+  const codeText = code ? ` ${code}` : "";
+  const severityText = severity ? ` ${severity.toUpperCase()}` : "";
+  const occurrenceText =
+    occurrences && occurrences > 1 ? ` (x${occurrences})` : "";
+  return `[${timestamp}] ${level.toUpperCase()}${severityText}${codeText}: ${message}${occurrenceText}${metaText}`;
 }
