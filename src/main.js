@@ -11,15 +11,81 @@ import { buildTwoBoneChain, solveIK } from "./ik.js";
 
 const debug = createDebugBus();
 const app = document.querySelector("#app");
+const urlParams = new URLSearchParams(window.location.search);
 
 if (!app) {
   throw new Error("Missing #app element for Three.js mount.");
 }
 
+const VISUAL_THEMES = {
+  legacy: {
+    clearColor: 0x0b0f1a,
+    lights: { ambient: 0.45, directional: 1.1 },
+    grid: { center: 0x2b6cb0, lines: 0x1a365d },
+    materials: {
+      floor: { color: 0x111827, roughness: 0.9, metalness: 0.05, emissive: 0x000000, emissiveIntensity: 0 },
+      base: { color: 0x38bdf8, roughness: 0.4, metalness: 0.2, emissive: 0x000000, emissiveIntensity: 0 },
+      column: { color: 0x334155, roughness: 0.8, metalness: 0.1, emissive: 0x000000, emissiveIntensity: 0 },
+      platform: { color: 0x1f2937, roughness: 0.8, metalness: 0.1, emissive: 0x000000, emissiveIntensity: 0 },
+      ramp: { color: 0x475569, roughness: 0.7, metalness: 0.1, emissive: 0x000000, emissiveIntensity: 0 },
+      obstacle: { color: 0x0f172a, roughness: 0.9, metalness: 0.05, emissive: 0x000000, emissiveIntensity: 0 },
+      player: { color: 0xf97316, roughness: 0.4, metalness: 0.05, emissive: 0x000000, emissiveIntensity: 0 },
+      enemy: { color: 0xdc2626, roughness: 0.5, metalness: 0.05, emissive: 0x000000, emissiveIntensity: 0 },
+      pickup: { color: 0x22d3ee, roughness: 0.35, metalness: 0.15, emissive: 0x164e63, emissiveIntensity: 0.6 },
+      impact: { color: 0xf8fafc, roughness: 0.3, metalness: 0.05, emissive: 0x475569, emissiveIntensity: 0.35 },
+      rigBase: { color: 0x22c55e, roughness: 0.5, metalness: 0.05, emissive: 0x000000, emissiveIntensity: 0 },
+      ikTarget: { color: 0xe11d48, roughness: 0.45, metalness: 0.05, emissive: 0x000000, emissiveIntensity: 0 },
+      joint: { color: 0xfde047, roughness: 0.5, metalness: 0.05, emissive: 0x000000, emissiveIntensity: 0 },
+      bone: { color: 0x94a3b8, roughness: 0.65, metalness: 0.1, emissive: 0x000000, emissiveIntensity: 0 },
+    },
+    enemyFlashColor: 0xfef08a,
+  },
+  styled: {
+    clearColor: 0x080b10,
+    lights: { ambient: 0.7, directional: 0.62 },
+    grid: { center: 0x1f2a3a, lines: 0x141b27 },
+    materials: {
+      floor: { color: 0x111824, roughness: 1, metalness: 0, emissive: 0x05080d, emissiveIntensity: 0.28 },
+      base: { color: 0x1f2937, roughness: 1, metalness: 0, emissive: 0x0f172a, emissiveIntensity: 0.2 },
+      column: { color: 0x273244, roughness: 1, metalness: 0, emissive: 0x0e1620, emissiveIntensity: 0.14 },
+      platform: { color: 0x1c2636, roughness: 1, metalness: 0, emissive: 0x0c1420, emissiveIntensity: 0.2 },
+      ramp: { color: 0x2d3a4c, roughness: 1, metalness: 0, emissive: 0x101924, emissiveIntensity: 0.16 },
+      obstacle: { color: 0x0f1724, roughness: 1, metalness: 0, emissive: 0x080d16, emissiveIntensity: 0.25 },
+      player: { color: 0xffffff, roughness: 0.95, metalness: 0, emissive: 0x43e8ff, emissiveIntensity: 0.16 },
+      enemy: { color: 0xff2f2f, roughness: 0.95, metalness: 0, emissive: 0x670f15, emissiveIntensity: 0.42 },
+      pickup: { color: 0x69e2ff, roughness: 0.9, metalness: 0, emissive: 0x105f73, emissiveIntensity: 0.78 },
+      impact: { color: 0xffffff, roughness: 0.9, metalness: 0, emissive: 0x7dd3fc, emissiveIntensity: 0.58 },
+      rigBase: { color: 0x5a677a, roughness: 1, metalness: 0, emissive: 0x1b2534, emissiveIntensity: 0.18 },
+      ikTarget: { color: 0xff4d6d, roughness: 0.95, metalness: 0, emissive: 0x530f26, emissiveIntensity: 0.34 },
+      joint: { color: 0xb7c5dd, roughness: 0.95, metalness: 0, emissive: 0x1f2c42, emissiveIntensity: 0.16 },
+      bone: { color: 0x7a8ca8, roughness: 1, metalness: 0, emissive: 0x1b2538, emissiveIntensity: 0.15 },
+    },
+    enemyFlashColor: 0xfff3c6,
+  },
+};
+
+const styleState = {
+  mode: urlParams.has("legacyStyle") ? "legacy" : "styled",
+};
+
+function createSceneMaterial(slot) {
+  return new THREE.MeshStandardMaterial({ ...VISUAL_THEMES[styleState.mode].materials[slot] });
+}
+
+function applyMaterialPreset(material, slot) {
+  const preset = VISUAL_THEMES[styleState.mode].materials[slot];
+  material.color.setHex(preset.color);
+  material.roughness = preset.roughness;
+  material.metalness = preset.metalness;
+  material.emissive.setHex(preset.emissive);
+  material.emissiveIntensity = preset.emissiveIntensity;
+  material.needsUpdate = true;
+}
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x0b0f1a, 1);
+renderer.setClearColor(VISUAL_THEMES[styleState.mode].clearColor, 1);
 app.appendChild(renderer.domElement);
 debug.check("renderer:context", Boolean(renderer.getContext()));
 
@@ -50,19 +116,24 @@ const cameraState = {
   dragSensitivity: 0.005,
 };
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+const ambientLight = new THREE.AmbientLight(0xffffff, VISUAL_THEMES[styleState.mode].lights.ambient);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1.1);
+const directionalLight = new THREE.DirectionalLight(0xffffff, VISUAL_THEMES[styleState.mode].lights.directional);
 directionalLight.position.set(3, 5, 2);
 scene.add(directionalLight);
 
-const grid = new THREE.GridHelper(20, 20, 0x2b6cb0, 0x1a365d);
+const grid = new THREE.GridHelper(
+  20,
+  20,
+  VISUAL_THEMES[styleState.mode].grid.center,
+  VISUAL_THEMES[styleState.mode].grid.lines
+);
 scene.add(grid);
 
 const floor = new THREE.Mesh(
   new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 })
+  createSceneMaterial("floor")
 );
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
@@ -176,7 +247,7 @@ function registerCollisionMesh(mesh) {
 
 const player = new THREE.Mesh(
   new THREE.CapsuleGeometry(0.45, 1.1, 6, 12),
-  new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.4 })
+  createSceneMaterial("player")
 );
 player.position.set(-7.5, 1.2, 0);
 scene.add(player);
@@ -319,6 +390,27 @@ crosshairHud.style.zIndex = "9999";
 crosshairHud.textContent = "+";
 app.appendChild(crosshairHud);
 
+const styleHud = document.createElement("div");
+styleHud.style.position = "fixed";
+styleHud.style.right = "12px";
+styleHud.style.top = "12px";
+styleHud.style.padding = "6px 10px";
+styleHud.style.background = "rgba(2, 6, 23, 0.78)";
+styleHud.style.color = "#dbeafe";
+styleHud.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, monospace";
+styleHud.style.fontSize = "11px";
+styleHud.style.border = "1px solid rgba(125, 211, 252, 0.32)";
+styleHud.style.borderRadius = "8px";
+styleHud.style.pointerEvents = "none";
+styleHud.style.zIndex = "9999";
+app.appendChild(styleHud);
+
+function updateStyleHud() {
+  styleHud.textContent = `Style: ${styleState.mode.toUpperCase()} (V to toggle)`;
+}
+
+updateStyleHud();
+
 function showCombatMessage(message, duration = 1) {
   combatState.message = message;
   combatState.messageTimer = duration;
@@ -357,7 +449,7 @@ const impactMarkers = [];
 function createDummy(position) {
   const mesh = new THREE.Mesh(
     dummyGeometry,
-    new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0x000000 })
+    createSceneMaterial("enemy")
   );
   mesh.position.copy(position);
   mesh.position.y = position.y + 0.8;
@@ -367,15 +459,15 @@ function createDummy(position) {
     hp: 2,
     flashTimer: 0,
     defeated: false,
-    baseColor: new THREE.Color(0xdc2626),
-    flashColor: new THREE.Color(0xfef08a),
+    baseColor: new THREE.Color(VISUAL_THEMES[styleState.mode].materials.enemy.color),
+    flashColor: new THREE.Color(VISUAL_THEMES[styleState.mode].enemyFlashColor),
   });
 }
 
 function spawnPickup(position) {
   const mesh = new THREE.Mesh(
     pickupGeometry,
-    new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x164e63 })
+    createSceneMaterial("pickup")
   );
   mesh.position.copy(position).add(pickupOffset);
   scene.add(mesh);
@@ -385,7 +477,7 @@ function spawnPickup(position) {
 function spawnImpactMarker(position) {
   const marker = new THREE.Mesh(
     impactGeometry,
-    new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0x475569 })
+    createSceneMaterial("impact")
   );
   marker.position.copy(position);
   scene.add(marker);
@@ -439,7 +531,7 @@ scene.add(ikGroup);
 
 const rigBase = new THREE.Mesh(
   new THREE.BoxGeometry(0.6, 0.6, 0.6),
-  new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.5 })
+  createSceneMaterial("rigBase")
 );
 rigBase.position.set(-3, 1.5, 3.2);
 ikGroup.add(rigBase);
@@ -452,7 +544,7 @@ const ikRoot = new THREE.Vector3(
 const ikChain = buildTwoBoneChain(ikRoot, 0.8, 0.8);
 const ikTarget = new THREE.Mesh(
   new THREE.SphereGeometry(0.12, 16, 16),
-  new THREE.MeshStandardMaterial({ color: 0xe11d48 })
+  createSceneMaterial("ikTarget")
 );
 ikTarget.position.set(
   rigBase.position.x + 0.8,
@@ -462,7 +554,7 @@ ikTarget.position.set(
 ikGroup.add(ikTarget);
 
 const jointGeometry = new THREE.SphereGeometry(0.1, 16, 16);
-const jointMaterial = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+const jointMaterial = createSceneMaterial("joint");
 const jointMeshes = ikChain.joints.map(() => {
   const joint = new THREE.Mesh(jointGeometry, jointMaterial);
   ikGroup.add(joint);
@@ -470,7 +562,7 @@ const jointMeshes = ikChain.joints.map(() => {
 });
 
 const boneGeometry = new THREE.CylinderGeometry(0.06, 0.06, 1, 12);
-const boneMaterial = new THREE.MeshStandardMaterial({ color: 0x94a3b8 });
+const boneMaterial = createSceneMaterial("bone");
 const boneMeshes = [0, 1].map(() => {
   const bone = new THREE.Mesh(boneGeometry, boneMaterial);
   ikGroup.add(bone);
@@ -568,6 +660,58 @@ const updateStaticColliders = () => {
 const clock = new THREE.Clock();
 let frameCount = 0;
 let statsElapsed = 0;
+
+function applyVisualStyle(mode) {
+  if (!VISUAL_THEMES[mode]) {
+    return;
+  }
+  styleState.mode = mode;
+  const theme = VISUAL_THEMES[mode];
+  renderer.setClearColor(theme.clearColor, 1);
+  ambientLight.intensity = theme.lights.ambient;
+  directionalLight.intensity = theme.lights.directional;
+  const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
+  if (gridMaterials[0]) {
+    gridMaterials[0].color.setHex(theme.grid.center);
+    gridMaterials[0].needsUpdate = true;
+  }
+  if (gridMaterials[1]) {
+    gridMaterials[1].color.setHex(theme.grid.lines);
+    gridMaterials[1].needsUpdate = true;
+  }
+
+  [
+    [floor.material, "floor"],
+    [baseMaterial, "base"],
+    [columnMaterial, "column"],
+    [platformMaterial, "platform"],
+    [ramp.material, "ramp"],
+    [obstacleMaterial, "obstacle"],
+    [player.material, "player"],
+    [rigBase.material, "rigBase"],
+    [ikTarget.material, "ikTarget"],
+    [jointMaterial, "joint"],
+    [boneMaterial, "bone"],
+  ].forEach(([material, slot]) => applyMaterialPreset(material, slot));
+
+  dummies.forEach((dummy) => {
+    applyMaterialPreset(dummy.mesh.material, "enemy");
+    dummy.baseColor.setHex(theme.materials.enemy.color);
+    dummy.flashColor.setHex(theme.enemyFlashColor);
+  });
+
+  pickups.forEach((pickup) => {
+    applyMaterialPreset(pickup.mesh.material, "pickup");
+  });
+
+  impactMarkers.forEach((marker) => {
+    applyMaterialPreset(marker.mesh.material, "impact");
+  });
+
+  updateStyleHud();
+}
+
+applyVisualStyle(styleState.mode);
 
 function animate() {
   const delta = clock.getDelta();
@@ -824,6 +968,9 @@ window.addEventListener("keydown", (event) => {
   if (event.code === "KeyH") {
     combatState.tutorialVisible = !combatState.tutorialVisible;
     updateCombatHud();
+  }
+  if (event.code === "KeyV") {
+    applyVisualStyle(styleState.mode === "styled" ? "legacy" : "styled");
   }
 });
 
