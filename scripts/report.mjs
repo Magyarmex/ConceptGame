@@ -1,48 +1,7 @@
 import { pathToFileURL } from "node:url";
-import { runTestSuite } from "./test-suite.mjs";
+import { generateReport } from "../AI coding tools/scripts/report.mjs";
 
-function formatStatus(entry) {
-  const statusLabel = entry.status.toUpperCase();
-  const details = entry.details ? `\n    Details: ${entry.details}` : "";
-  const nextStep = entry.nextStep ? `\n    Next: ${entry.nextStep}` : "";
-  return `- ${statusLabel} ${entry.name}${details}${nextStep}`;
-}
-
-export async function generateReport() {
-  const { results, summary, hasFail } = await runTestSuite({ silent: true });
-  const failed = results.filter((entry) => entry.status === "fail");
-  const warnings = results.filter((entry) => entry.status === "warn");
-
-  console.log("ConceptGame Diagnostics Report");
-  console.log("=============================");
-  console.log(`Status: ${hasFail ? "FAIL" : "PASS"}`);
-  console.log(
-    `Checks: ${summary.passed} passed, ${summary.failed} failed, ${summary.warnings} warning(s)`
-  );
-
-  if (failed.length) {
-    console.log("\nFailing checks:");
-    failed.forEach((entry) => console.log(formatStatus(entry)));
-  }
-
-  if (warnings.length) {
-    console.log("\nWarnings:");
-    warnings.forEach((entry) => console.log(formatStatus(entry)));
-  }
-
-  if (!failed.length && !warnings.length) {
-    console.log("\nAll checks are healthy.");
-  }
-
-  console.log("\nNext steps:");
-  if (failed.length) {
-    console.log("- Resolve the failed checks above and re-run the test suite.");
-  } else if (warnings.length) {
-    console.log("- Address the warnings if you want full coverage.");
-  } else {
-    console.log("- Share this report with the team and keep monitoring.");
-  }
-}
+export { generateReport };
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   generateReport().catch((error) => {

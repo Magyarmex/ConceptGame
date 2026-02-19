@@ -23,6 +23,16 @@ so outbound HTTPS access is required.
 - Append `?legacyStyle` to load directly into the legacy visual mode for side-by-side review.
 - Move the IK target with the arrow keys, and raise/lower it with R/F.
 
+### Dev Mode Controls (`?dev`)
+- `B` toggles live collision wireframe overlays.
+- `O` toggles occupied-volume overlays.
+- `N/P` cycles selected static collider volume.
+- `I/J/K/L` move selected collider on X/Z.
+- `U` and `;` move selected collider on Y.
+- `,` and `.` rotate selected collider around Y.
+- `-` and `=` scale selected collider.
+- `X` exports current layout deltas to JSON and localStorage.
+
 ## Physics + IK Modules
 - `src/physics.js` exposes a tiny rigid-body helper with semi-implicit Euler integration,
   capsule-vs-box collision resolution, and grounding updates. Use `integrateBody` followed
@@ -31,19 +41,23 @@ so outbound HTTPS access is required.
   `buildTwoBoneChain` helper for quick demos or future rigs.
 
 ## Debugging
+- AI coding environment tooling is bundled under `AI coding tools/` for portability across repositories.
 - Append `?debug` to the URL to enable the on-screen debug console and collider wireframes.
+- Append `?dev` to enable the in-scene dev HUD, entity registry panel, and layout editing workflow.
+- Append `?dev&runScript=smoke` to auto-run the built-in scripted smoke path.
 - Errors and unhandled promise rejections will be captured in the debug console when enabled.
 - Live stats (FPS/frame time/draw calls/triangles) appear in the debug console.
 - Run `node scripts/test-suite.mjs` for the automated diagnostics suite (file integrity, imports, runtime checks).
-- Run `node scripts/report.mjs` for a human-readable summary with next steps.
+- Run `node scripts/report.mjs` for a human-readable summary with next steps + JSON artifact.
 - Run `node scripts/diagnostics.mjs` to check core file wiring and debug hooks.
+- Run `node scripts/agent-dev-workflow.mjs` for one-command test suite + scripted playtest + report generation (real harness traces when Playwright/Puppeteer is available).
 
 
 ## Map Layout (Shooter Prototype)
 - The map is now a compact multi-zone layout with a spawn room, mid lane, upper route, and flank room.
 - Vertical traversal includes an upper ramp route and a stair-step connector for looped movement.
 - Targets are distributed across near/mid/far lanes, with elevated and flank pressure positions for engagement choice testing.
-- Use `?debug` to confirm collider occupancy aligns with rendered map geometry.
+- Use `?debug` or `?dev` to confirm collider occupancy aligns with rendered map geometry.
 
 ## GitHub Pages
 - The site is fully static; GitHub Pages should serve `index.html` at the repo root.
