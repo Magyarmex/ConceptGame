@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { generateReport } from "../AI coding tools/scripts/report.mjs";
 
