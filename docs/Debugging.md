@@ -1,5 +1,6 @@
 # Debugging & Error Handling
 
+- AI coding environment tooling is bundled under `AI coding tools/` for portability across repositories.
 ## Debug Console
 - Enable by adding `?debug` to the URL.
 - The console overlays on the page and logs structured messages, errors, and renderer capabilities.

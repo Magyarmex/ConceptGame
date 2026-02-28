@@ -41,6 +41,7 @@ so outbound HTTPS access is required.
   `buildTwoBoneChain` helper for quick demos or future rigs.
 
 ## Debugging
+- AI coding environment tooling is bundled under `AI coding tools/` for portability across repositories.
 - Append `?debug` to the URL to enable the on-screen debug console and collider wireframes.
 - Append `?dev` to enable the in-scene dev HUD, entity registry panel, and layout editing workflow.
 - Append `?dev&runScript=smoke` to auto-run the built-in scripted smoke path.
